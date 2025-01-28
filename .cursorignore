@@ -1,0 +1,22 @@
+# 依赖包目录
+node_modules/
+dist/
+build/
+
+# 构建输出
+.next/
+out/
+
+# 临时文件
+.temp/
+.cache/
+
+# 媒体和大型文件
+*.mp4
+*.mp3
+*.pdf
+*.zip
+
+# 环境配置
+.env
+.env.*

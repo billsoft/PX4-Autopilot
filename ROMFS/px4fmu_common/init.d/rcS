@@ -651,3 +651,41 @@ unset VEHICLE_TYPE
 # Boot is complete, inform MAVLink app(s) that the system is now fully up and running.
 #
 mavlink boot_complete
+
+# 1. 加载 rc.config，读取启动模式
+if [ -f /etc/init.d/rc.config ]
+then
+    echo "Loading rc.config..."
+    . /etc/init.d/rc.config
+else
+    echo "rc.config not found. Using default full configuration."
+    CONFIG_TYPE="full"
+fi
+
+# 2. 根据 CONFIG_TYPE 判断是否走 minimal
+if [ "$CONFIG_TYPE" = "minimal" ]
+then
+    echo "Starting minimal configuration..."
+    if [ -f /etc/init.d/rc.minimal ]
+    then
+        . /etc/init.d/rc.minimal
+        exit 0
+    else
+        echo "ERROR: rc.minimal not found!"
+        exit 1
+    fi
+fi
+
+# 3. 如果不是 minimal，就执行 PX4 完整模式（原始流程）
+echo "Starting full system configuration..."
+
+# 加载标准启动脚本
+. /etc/init.d/rc.board
+. /etc/init.d/rc.interface
+. /etc/init.d/rc.sensors
+. /etc/init.d/rc.io
+. /etc/init.d/rc.serial
+. /etc/init.d/rc.logging
+. /etc/init.d/rc.mc_defaults
+. /etc/init.d/rc.mc_apps
+. /etc/init.d/rc.system
