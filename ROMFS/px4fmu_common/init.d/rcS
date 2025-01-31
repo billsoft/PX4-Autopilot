@@ -51,6 +51,16 @@ ver all
 # Try to mount the microSD card.
 #
 if [ -b "/dev/mmcsd0" ]
+#!/bin/sh -e
+
+# 这是一个简化的PX4启动脚本，展示了如何加载配置文件和服务。
+# 它不处理硬件错误或意外情况，仅用于演示。
+
+# 软件的开始时间标记
+echo "Starting system at $(date)"
+
+# 检查并挂载SD卡（如果存在）
+if [ "$(lsblk | grep /dev/sd)" ]
 then
 	if mount -t vfat /dev/mmcsd0 /fs/microsd
 	then
@@ -92,9 +102,32 @@ else
 	then
 		set STORAGE_AVAILABLE yes
 	fi
+    echo "Mounting SD card..."
+    mount -a || true  # 使用|| true防止脚本终止，即使命令失败
+fi
+
+# 加载PX4默认参数文件
+if [ -f /etc/param/default.param ]
+then
+    param load default.param
+else
+    echo "Default parameter file not found."
+fi
+
+# 检查并加载固件更新（如果有）
+if [ -n "$(ls /boot/px4)" ]
+then
+    echo "Firmware update detected, applying..."
+    cp /boot/px4/* /etc/px4 || true
+    reboot cold  # 冷重启动应用更改
 fi
 
 if [ $STORAGE_AVAILABLE = yes ]
+# 加载用户配置文件并设置变量
+. /etc/init.d/rc.user_config
+
+# 初始化日志系统
+if [ -f /etc/init.d/rc.logging ]
 then
 	if hardfault_log check
 	then
@@ -689,3 +722,50 @@ echo "Starting full system configuration..."
 . /etc/init.d/rc.mc_defaults
 . /etc/init.d/rc.mc_apps
 . /etc/init.d/rc.system
+else
+    echo "Logging configuration file not found."
+fi
+
+# 按钮和指示灯初始化
+rgbled start -X -q
+rgbled_ncp5623c start -X -q
+rgbled_lp5562 start -X -q
+rgbled_is31fl3195 start -X -q
+
+# 初始化PWM输出和DS Telemetry（DShot）
+dshot start
+ds_tlm start
+
+# 启动PX4核心服务，如心跳、系统状态等
+px4 start -c /dev/null || { echo "Failed to start PX4"; exit 1; }
+
+# 启用默认的硬件接口和PWM输出
+if [ -f /etc/init.d/rc.board ]
+then
+    . /etc/init.d/rc.board
+else
+    echo "Board configuration file not found."
+fi
+
+# 初始化网络和接口服务
+. /etc/init.d/rc.interface
+
+# 初始化传感器堆栈，如IMU、GPS等
+. /etc/init.d/rc.sensors
+
+# 初始化输入系统（如遥测控制）
+rc_input start $RC_INPUT_ARGS
+
+# 启动MAVLink协议处理
+mavlink start -d /dev/ttyACM0 || { echo "Failed to start MAVLink"; exit 1; }
+
+# 启用用户自定义的启动脚本（如有）
+if [ -f /etc/init.d/rc.custom ]
+then
+    . /etc/init.d/rc.custom
+else
+    echo "Custom startup script not found."
+fi
+
+# 记录系统启动完成的时间
+echo "System fully up and running at $(date)"
