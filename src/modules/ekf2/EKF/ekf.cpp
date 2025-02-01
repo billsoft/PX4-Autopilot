@@ -492,78 +492,103 @@ static void printRingBuffer(const char *name, RingBuffer<T> *rb)
  * 该函数用于输出EKF的内部状态信息，包括姿态、速度、位置、陀螺仪偏置、加速度计偏置等。
  * 通过打印这些信息，便于开发者进行调试和状态监控。
  */
+/**
+ * @brief 打印EKF状态信息
+ *
+ * 该函数用于输出EKF的内部状态信息，包括姿态、速度、位置、陀螺仪偏置、加速度计偏置等。
+ * 通过打印这些信息，便于开发者进行调试和状态监控。
+ */
 void Ekf::print_status()
 {
 	printf("\n状态信息: (%.4f 秒前)\n", (_time_latest_us - _time_delayed_us) * 1e-6); // 打印状态更新时间
+
+	// 打印当前姿态信息，包括四元数和对应的欧拉角及其方差
 	printf("姿态 (%d-%d): [%.3f, %.3f, %.3f, %.3f] (欧拉角 [%.1f, %.1f, %.1f] 度) 方差: [%.1e, %.1e, %.1e]\n",
 	       State::quat_nominal.idx, State::quat_nominal.idx + State::quat_nominal.dof - 1,
 	       (double)_state.quat_nominal(0), (double)_state.quat_nominal(1), (double)_state.quat_nominal(2),
 	       (double)_state.quat_nominal(3),
-	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).phi()), // 打印姿态四元数及其欧拉角
-	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).theta()),
-	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).psi()),
+	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).phi()), // 打印姿态四元数的欧拉角（滚转角）
+	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).theta()), // 打印姿态四元数的欧拉角（俯仰角）
+	       (double)math::degrees(matrix::Eulerf(_state.quat_nominal).psi()), // 打印姿态四元数的欧拉角（偏航角）
 	       (double)getStateVariance<State::quat_nominal>()(0), (double)getStateVariance<State::quat_nominal>()(1),
 	       (double)getStateVariance<State::quat_nominal>()(2)
 	      );
-
+	// 打印当前速度信息及其方差
+	// 该部分代码用于输出当前的速度状态，包括速度的三个分量（x, y, z）及其对应的方差。
 	printf("速度 (%d-%d): [%.3f, %.3f, %.3f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::vel.idx, State::vel.idx + State::vel.dof - 1,
-	       (double)_state.vel(0), (double)_state.vel(1), (double)_state.vel(2),
-	       (double)getStateVariance<State::vel>()(0), (double)getStateVariance<State::vel>()(1),
-	       (double)getStateVariance<State::vel>()(2)
+	       State::vel.idx, State::vel.idx + State::vel.dof - 1, // 输出速度的索引范围
+	       (double)_state.vel(0), (double)_state.vel(1), (double)_state.vel(2), // 输出速度的三个分量
+	       (double)getStateVariance<State::vel>()(0), (double)getStateVariance<State::vel>()(1), // 输出速度方差的三个分量
+	       (double)getStateVariance<State::vel>()(2) // 输出速度方差的第三个分量
 	      );
 
+	// 获取当前位置信息
+	// 调用getPosition()函数获取当前的位置信息，返回值为三维向量。
 	const Vector3f position = getPosition(); // 获取当前位置信息
+	// 打印位置及其方差
+	// 该部分代码用于输出当前的位置状态，包括位置的三个分量（x, y, z）及其对应的方差。
 	printf("位置 (%d-%d): [%.3f, %.3f, %.3f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::pos.idx, State::pos.idx + State::pos.dof - 1,
-	       (double)position(0), (double)position(1), (double) position(2),
-	       (double)getStateVariance<State::pos>()(0), (double)getStateVariance<State::pos>()(1),
-	       (double)getStateVariance<State::pos>()(2)
+	       State::pos.idx, State::pos.idx + State::pos.dof - 1, // 输出位置的索引范围
+	       (double)position(0), (double)position(1), (double) position(2), // 输出位置的三个分量
+	       (double)getStateVariance<State::pos>()(0), (double)getStateVariance<State::pos>()(1), // 输出位置方差的三个分量
+	       (double)getStateVariance<State::pos>()(2) // 输出位置方差的第三个分量
 	      );
 
+	// 打印陀螺仪偏置及其方差
+	// 该部分代码用于输出陀螺仪的偏置状态，包括偏置的三个分量（x, y, z）及其对应的方差。
 	printf("陀螺仪偏置 (%d-%d): [%.6f, %.6f, %.6f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::gyro_bias.idx, State::gyro_bias.idx + State::gyro_bias.dof - 1,
-	       (double)_state.gyro_bias(0), (double)_state.gyro_bias(1), (double)_state.gyro_bias(2),
-	       (double)getStateVariance<State::gyro_bias>()(0), (double)getStateVariance<State::gyro_bias>()(1),
-	       (double)getStateVariance<State::gyro_bias>()(2)
+	       State::gyro_bias.idx, State::gyro_bias.idx + State::gyro_bias.dof - 1, // 输出陀螺仪偏置的索引范围
+	       (double)_state.gyro_bias(0), (double)_state.gyro_bias(1), (double)_state.gyro_bias(2), // 输出陀螺仪偏置的三个分量
+	       (double)getStateVariance<State::gyro_bias>()(0), (double)getStateVariance<State::gyro_bias>()(1), // 输出陀螺仪偏置方差的三个分量
+	       (double)getStateVariance<State::gyro_bias>()(2) // 输出陀螺仪偏置方差的第三个分量
 	      );
 
+	// 打印加速度计偏置及其方差
+	// 该部分代码用于输出加速度计的偏置状态，包括偏置的三个分量（x, y, z）及其对应的方差。
 	printf("加速度计偏置 (%d-%d): [%.6f, %.6f, %.6f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::accel_bias.idx, State::accel_bias.idx + State::accel_bias.dof - 1,
-	       (double)_state.accel_bias(0), (double)_state.accel_bias(1), (double)_state.accel_bias(2),
-	       (double)getStateVariance<State::accel_bias>()(0), (double)getStateVariance<State::accel_bias>()(1),
-	       (double)getStateVariance<State::accel_bias>()(2)
+	       State::accel_bias.idx, State::accel_bias.idx + State::accel_bias.dof - 1, // 输出加速度计偏置的索引范围
+	       (double)_state.accel_bias(0), (double)_state.accel_bias(1), (double)_state.accel_bias(2), // 输出加速度计偏置的三个分量
+	       (double)getStateVariance<State::accel_bias>()(0), (double)getStateVariance<State::accel_bias>()(1), // 输出加速度计偏置方差的三个分量
+	       (double)getStateVariance<State::accel_bias>()(2) // 输出加速度计偏置方差的第三个分量
 	      );
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
+	// 打印磁场测量值及其方差
+	// 该部分代码用于输出当前的磁场测量值，包括磁场的三个分量（x, y, z）及其对应的方差。
 	printf("磁场 (%d-%d): [%.3f, %.3f, %.3f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::mag_I.idx, State::mag_I.idx + State::mag_I.dof - 1,
-	       (double)_state.mag_I(0), (double)_state.mag_I(1), (double)_state.mag_I(2),
-	       (double)getStateVariance<State::mag_I>()(0), (double)getStateVariance<State::mag_I>()(1),
-	       (double)getStateVariance<State::mag_I>()(2)
+	       State::mag_I.idx, State::mag_I.idx + State::mag_I.dof - 1, // 输出磁场的索引范围
+	       (double)_state.mag_I(0), (double)_state.mag_I(1), (double)_state.mag_I(2), // 输出磁场的三个分量
+	       (double)getStateVariance<State::mag_I>()(0), (double)getStateVariance<State::mag_I>()(1), // 输出磁场方差的三个分量
+	       (double)getStateVariance<State::mag_I>()(2) // 输出磁场方差的第三个分量
 	      );
 
+	// 打印磁偏置及其方差
+	// 该部分代码用于输出磁偏置状态，包括偏置的三个分量（x, y, z）及其对应的方差。
 	printf("磁偏置 (%d-%d): [%.3f, %.3f, %.3f] 方差: [%.1e, %.1e, %.1e]\n",
-	       State::mag_B.idx, State::mag_B.idx + State::mag_B.dof - 1,
-	       (double)_state.mag_B(0), (double)_state.mag_B(1), (double)_state.mag_B(2),
-	       (double)getStateVariance<State::mag_B>()(0), (double)getStateVariance<State::mag_B>()(1),
-	       (double)getStateVariance<State::mag_B>()(2)
+	       State::mag_B.idx, State::mag_B.idx + State::mag_B.dof - 1, // 输出磁偏置的索引范围
+	       (double)_state.mag_B(0), (double)_state.mag_B(1), (double)_state.mag_B(2), // 输出磁偏置的三个分量
+	       (double)getStateVariance<State::mag_B>()(0), (double)getStateVariance<State::mag_B>()(1), // 输出磁偏置方差的三个分量
+	       (double)getStateVariance<State::mag_B>()(2) // 输出磁偏置方差的第三个分量
 	      );
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_WIND)
+	// 打印风速及其方差
+	// 该部分代码用于输出当前的风速状态，包括风速的两个分量（x, y）及其对应的方差。
 	printf("风速 (%d-%d): [%.3f, %.3f] 方差: [%.1e, %.1e]\n",
-	       State::wind_vel.idx, State::wind_vel.idx + State::wind_vel.dof - 1,
-	       (double)_state.wind_vel(0), (double)_state.wind_vel(1),
-	       (double)getStateVariance<State::wind_vel>()(0), (double)getStateVariance<State::wind_vel>()(1)
+	       State::wind_vel.idx, State::wind_vel.idx + State::wind_vel.dof - 1, // 输出风速的索引范围
+	       (double)_state.wind_vel(0), (double)_state.wind_vel(1), // 输出风速的两个分量
+	       (double)getStateVariance<State::wind_vel>()(0), (double)getStateVariance<State::wind_vel>()(1) // 输出风速方差的两个分量
 	      );
 #endif // CONFIG_EKF2_WIND
 
 #if defined(CONFIG_EKF2_TERRAIN)
+	// 打印地形位置及其方差
+	// 该部分代码用于输出当前的地形位置状态，包括地形位置的值及其对应的方差。
 	printf("地形位置 (%d): %.3f 方差: %.1e\n",
-	       State::terrain.idx,
-	       (double)_state.terrain,
-	       (double)getStateVariance<State::terrain>()(0)
+	       State::terrain.idx, // 输出地形位置的索引
+	       (double)_state.terrain, // 输出地形位置的值
+	       (double)getStateVariance<State::terrain>()(0) // 输出地形位置方差的值
 	      );
 #endif // CONFIG_EKF2_TERRAIN
 

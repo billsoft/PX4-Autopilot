@@ -1089,40 +1089,39 @@ void Ekf::fuseDirectStateMeasurement(const float innov, const float innov_var, c
 
 	// 根据抑制标记，清除对应状态的增益
 	clearInhibitedStateKalmanGains(K);
-
 #if false
 	// 以下是Joseph形式的更新，计算开销非常大，仅用于调试
-	auto A = matrix::eye<float, State::size>();
-	VectorState H;
-	H(state_index) = 1.f;
-	A -= K.multiplyByTranspose(H);
-	P = A * P;
-	P = P.multiplyByTranspose(A);
+	auto A = matrix::eye<float, State::size>(); // 创建单位矩阵 A
+	VectorState H; // 定义观测模型向量 H
+	H(state_index) = 1.f; // 设置观测模型的当前状态索引为 1
+	A -= K.multiplyByTranspose(H); // 更新矩阵 A，减去卡尔曼增益 K 与观测模型 H 的转置乘积
+	P = A * P; // 更新协方差矩阵 P
+	P = P.multiplyByTranspose(A); // 进行转置乘法更新协方差矩阵 P
 
-	const VectorState KR = K * R;
-	P += KR.multiplyByTranspose(K);
+	const VectorState KR = K * R; // 计算增益 K 与测量噪声 R 的乘积
+	P += KR.multiplyByTranspose(K); // 更新协方差矩阵 P，加入增益与噪声的乘积
 #else
 	// 更高效的Joseph稳定形式
-	VectorState PH = P.row(state_index);
+	VectorState PH = P.row(state_index); // 获取协方差矩阵 P 的当前状态行
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j < State::size; j++) {
-			P(i, j) -= K(i) * PH(j);
+			P(i, j) -= K(i) * PH(j); // 更新协方差矩阵 P，减去卡尔曼增益 K 与当前状态行 PH 的乘积
 		}
 	}
 
-	PH = P.col(state_index);
+	PH = P.col(state_index); // 获取协方差矩阵 P 的当前状态列
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j <= i; j++) {
-			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j);
-			P(j, i) = P(i, j);
+			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j); // 更新协方差矩阵 P，确保对称性
+			P(j, i) = P(i, j); // 确保协方差矩阵是对称的
 		}
 	}
 #endif
 	// 限制状态方差，确保方差在合理范围内
-	constrainStateVariances();
+	constrainStateVariances(); // 调用函数限制状态方差
 
 	// 应用状态修正，将卡尔曼增益 K 和创新值 innov 结合，更新状态
-	fuse(K, innov);
+	fuse(K, innov); // 使用卡尔曼增益 K 和创新值 innov 更新状态
 }
 
 bool Ekf::measurementUpdate(VectorState &K, const VectorState &H, const float R, const float innovation)
@@ -1131,29 +1130,29 @@ bool Ekf::measurementUpdate(VectorState &K, const VectorState &H, const float R,
 	// K为增益向量，H为观测模型向量，R为测量噪声，innovation为观测残差
 
 	// 清除被抑制的状态卡尔曼增益
-	clearInhibitedStateKalmanGains(K);
+	clearInhibitedStateKalmanGains(K); // 清除被抑制的状态卡尔曼增益 K
 
 #if false
 	// Joseph稳定形式，计算代价很大，仅用于调试
 	auto A = matrix::eye<float, State::size>(); // 创建单位矩阵
-	A -= K.multiplyByTranspose(H); // 更新矩阵 A
+	A -= K.multiplyByTranspose(H); // 更新矩阵 A，减去卡尔曼增益 K 与观测模型 H 的转置乘积
 	P = A * P; // 更新协方差矩阵 P
-	P = P.multiplyByTranspose(A); // 进行转置乘法更新
+	P = P.multiplyByTranspose(A); // 进行转置乘法更新协方差矩阵 P
 	const VectorState KR = K * R; // 计算增益与噪声的乘积
 	P += KR.multiplyByTranspose(K); // 更新协方差矩阵 P
 #else
 	// 更高效的Joseph稳定形式
-	VectorState PH = P * H; // 计算 P 和 H 的乘积
+	VectorState PH = P * H; // 计算协方差矩阵 P 与观测模型 H 的乘积
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j < State::size; j++) {
-			P(i, j) -= K(i) * PH(j); // 更新协方差矩阵 P
+			P(i, j) -= K(i) * PH(j); // 更新协方差矩阵 P，减去卡尔曼增益 K 与乘积 PH 的乘积
 		}
 	}
 
-	PH = P * H; // 再次计算 P 和 H 的乘积
+	PH = P * H; // 再次计算协方差矩阵 P 与观测模型 H 的乘积
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j <= i; j++) {
-			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j); // 更新协方差矩阵 P
+			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j); // 更新协方差矩阵 P，确保对称性
 			P(j, i) = P(i, j); // 确保协方差矩阵是对称的
 		}
 	}
