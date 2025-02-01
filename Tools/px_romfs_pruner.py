@@ -113,9 +113,9 @@ def main():
             # write out the pruned content else
             if not board_excluded:
                 # overwrite old scratch file
-                with open(file_path, "wb") as f:
+                with open(file_path, "w", encoding='utf-8') as f:
                     pruned_content = re.sub("\r\n", "\n", pruned_content)
-                    f.write(pruned_content.encode("ascii", errors='strict'))
+                    f.write(pruned_content)
             else:
                 os.remove(file_path)
 

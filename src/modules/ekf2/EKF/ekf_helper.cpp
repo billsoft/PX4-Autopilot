@@ -1,70 +1,64 @@
-/****************************************************************************
- *
- *   Copyright (c) 2015-2023 PX4 Development Team. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name PX4 nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- ****************************************************************************/
-
-/**
- * @file ekf_helper.cpp
- * Definition of ekf helper functions.
- *
- * @author Roman Bast <bapstroman@gmail.com>
- *
- */
-
 #include "ekf.h"
 
 #include <mathlib/mathlib.h>
 #include <lib/world_magnetic_model/geo_mag_declination.h>
 #include <cstdlib>
 
+/****************************************************************************
+ *
+ *   版权声明 (c) 2015-2023 PX4开发团队 (PX4 Development Team). 保留所有权利.
+ *
+ *   无论是否进行修改，以下条件都必须得到满足，才能使用本软件源代码和二进制形式：
+ *
+ *   1. 源代码的再发布必须保留上述版权声明、本条件列表以及下面的免责声明。
+ *   2. 以二进制形式再发布时，必须在随附的文档和/或其它材料中，
+ *      包含上述版权声明、本条件列表以及下面的免责声明。
+ *   3. 未经事先书面许可，不得使用PX4或者其贡献者的名称来为本软件衍生品做推广或背书。
+ *
+ *   本软件由版权拥有者和贡献者按“原样”提供，并且不提供任何明示或暗示的保证，
+ *   包括但不限于适销性和适用性的暗示保证。在任何情况下，版权拥有者或贡献者都不对使用本软件
+ *   而产生的任何直接、间接、附带、特殊、惩罚性或衍生性损害（包括但不限于获取替代产品或服务，
+ *   使用损失，数据或利润损失，或业务中断）承担责任，即使在事先已被告知该等损害的可能性。
+ *
+ ****************************************************************************/
+
+/**
+ * @file ekf_helper.cpp
+ * 该文件定义了与EKF辅助功能相关的实现，包含若干帮助函数。
+ */
+
 bool Ekf::isHeightResetRequired() const
 {
-	// check if height is continuously failing because of accel errors
+	// 检查垂直方向的加速度传感器数据是否持续不可靠，如果超时则需要重置高度
 	const bool continuous_bad_accel_hgt = isTimedOut(_time_good_vert_accel, (uint64_t)_params.bad_acc_reset_delay_us);
 
-	// check if height has been inertial deadreckoning for too long
+	// 检查高度融合是否超时，没有在预期时间内进行高度融合，也需要重置
 	const bool hgt_fusion_timeout = isTimedOut(_time_last_hgt_fuse, _params.hgt_fusion_timeout_max);
 
+	// 当连续不良的加速度数据或高度融合超时时，需要重置高度
 	return (continuous_bad_accel_hgt || hgt_fusion_timeout);
 }
 
 Vector3f Ekf::calcEarthRateNED(float lat_rad) const
 {
-	return Vector3f(CONSTANTS_EARTH_SPIN_RATE * cosf(lat_rad),
-			0.0f,
-			-CONSTANTS_EARTH_SPIN_RATE * sinf(lat_rad));
+	// 计算地球自转在NED坐标系下的角速度向量，lat_rad为当前纬度（弧度）
+	// 地球自转速率约为0.000072722052 rad/s (CONSTANTS_EARTH_SPIN_RATE)
+	// 在NED下，x轴为北向，y轴为东向，z轴朝地心方向
+	// cos(lat)*地球自转速度在N轴分量，sin(lat)*地球自转速度在Z轴分量
+	return Vector3f(
+		CONSTANTS_EARTH_SPIN_RATE * cosf(lat_rad),
+		0.0f,
+		-CONSTANTS_EARTH_SPIN_RATE * sinf(lat_rad)
+	);
 }
 
 void Ekf::getEkfGlobalOrigin(uint64_t &origin_time, double &latitude, double &longitude, float &origin_alt) const
 {
+	// 获取EKF全局原点的信息
+	// origin_time：原点对应的时间戳
+	// latitude, longitude：原点的纬度、经度
+	// origin_alt：原点的高度
+
 	origin_time = _local_origin_lat_lon.getProjectionReferenceTimestamp();
 	latitude = _local_origin_lat_lon.getProjectionReferenceLat();
 	longitude = _local_origin_lat_lon.getProjectionReferenceLon();
@@ -73,6 +67,8 @@ void Ekf::getEkfGlobalOrigin(uint64_t &origin_time, double &latitude, double &lo
 
 bool Ekf::checkLatLonValidity(const double latitude, const double longitude)
 {
+	// 检查纬度和经度数值是否在合理范围内，并且是有限数
+	// 纬度范围：[-90, 90]，经度范围：[-180,180]
 	const bool lat_valid = (PX4_ISFINITE(latitude) && (abs(latitude) <= 90));
 	const bool lon_valid = (PX4_ISFINITE(longitude) && (abs(longitude) <= 180));
 
@@ -81,18 +77,22 @@ bool Ekf::checkLatLonValidity(const double latitude, const double longitude)
 
 bool Ekf::checkAltitudeValidity(const float altitude)
 {
-	// sanity check valid altitude anywhere between the Mariana Trench and edge of Space
-	return (PX4_ISFINITE(altitude) && ((altitude > -12'000.f) && (altitude < 100'000.f)));
+	// 检查高度数值是否在合理范围内，并且是有限数
+	// 给定一个极限范围，如-12000m(海底)到100000m(接近太空边缘)
+	return (PX4_ISFINITE(altitude) && ((altitude > -12000.f) && (altitude < 100000.f)));
 }
 
 bool Ekf::setEkfGlobalOrigin(const double latitude, const double longitude, const float altitude, const float hpos_var,
-			     const float vpos_var)
+		     const float vpos_var)
 {
+	// 设置EKF的全局原点信息，包含经纬度和高度。如果设置失败则返回false
+	// hpos_var：水平方向位置融合的方差，vpos_var：垂直方向位置融合的方差
+
 	if (!setLatLonOrigin(latitude, longitude, hpos_var)) {
 		return false;
 	}
 
-	// altitude is optional
+	// 海拔高度是可选参数
 	setAltOrigin(altitude, vpos_var);
 
 	return true;
@@ -100,12 +100,14 @@ bool Ekf::setEkfGlobalOrigin(const double latitude, const double longitude, cons
 
 bool Ekf::setLatLonOrigin(const double latitude, const double longitude, const float hpos_var)
 {
+	// 设置EKF的经纬度原点，如果初始就已经在导航中，需要根据原先的局部坐标做对应平移
 	if (!checkLatLonValidity(latitude, longitude)) {
 		return false;
 	}
 
 	if (!_local_origin_lat_lon.isInitialized() && isLocalHorizontalPositionValid()) {
-		// Already navigating in a local frame, use the origin to initialize global position
+		// 如果之前已经在局部坐标系下导航，那么需要将原点转到新的全球坐标经纬度，
+		// 同时对已有的局部位置信息进行校正
 		const Vector2f pos_prev = getLocalHorizontalPosition();
 		_local_origin_lat_lon.initReference(latitude, longitude, _time_delayed_us);
 		double new_latitude;
@@ -114,7 +116,8 @@ bool Ekf::setLatLonOrigin(const double latitude, const double longitude, const f
 		resetHorizontalPositionTo(new_latitude, new_longitude, hpos_var);
 
 	} else {
-		// Simply move the origin and compute the change in local position
+		// 如果还没有初始化或者不满足条件，则只是简单地移动原点，
+		// 并计算在局部坐标下的位置偏移
 		const Vector2f pos_prev = getLocalHorizontalPosition();
 		_local_origin_lat_lon.initReference(latitude, longitude, _time_delayed_us);
 		const Vector2f pos_new = getLocalHorizontalPosition();
@@ -127,6 +130,7 @@ bool Ekf::setLatLonOrigin(const double latitude, const double longitude, const f
 
 bool Ekf::setAltOrigin(const float altitude, const float vpos_var)
 {
+	// 设置EKF的高度原点，如果该高度数值不合理，则返回false
 	if (!checkAltitudeValidity(altitude)) {
 		return false;
 	}
@@ -135,11 +139,14 @@ bool Ekf::setAltOrigin(const float altitude, const float vpos_var)
 		 (double)altitude);
 
 	if (!PX4_ISFINITE(_local_origin_alt) && isLocalVerticalPositionValid()) {
+		// 如果之前还没设置过局部高度原点，但是系统已经在进行垂直方向导航，
+		// 则在当前状态的基础上进行高度重置
 		const float local_alt_prev = _gpos.altitude();
 		_local_origin_alt = altitude;
 		resetAltitudeTo(local_alt_prev + _local_origin_alt);
 
 	} else {
+		// 否则，只需要更新本地原点高度并做好相应的重置标记
 		const float delta_origin_alt = altitude - _local_origin_alt;
 		_local_origin_alt = altitude;
 		updateVerticalPositionResetStatus(-delta_origin_alt);
@@ -153,13 +160,14 @@ bool Ekf::setAltOrigin(const float altitude, const float vpos_var)
 }
 
 bool Ekf::resetGlobalPositionTo(const double latitude, const double longitude, const float altitude,
-				const float hpos_var, const float vpos_var)
+			  const float hpos_var, const float vpos_var)
 {
+	// 将全局位置重置到指定经纬度和高度（如果有效），并且更新相应的协方差
 	if (!resetLatLonTo(latitude, longitude, hpos_var)) {
 		return false;
 	}
 
-	// altitude is optional
+	// 可选重置海拔高度
 	initialiseAltitudeTo(altitude, vpos_var);
 
 	return true;
@@ -167,6 +175,7 @@ bool Ekf::resetGlobalPositionTo(const double latitude, const double longitude, c
 
 bool Ekf::resetLatLonTo(const double latitude, const double longitude, const float hpos_var)
 {
+	// 将当前位置重置到指定的经纬度，更新EKF的全局位置（经纬度），并相应修改局部坐标系
 	if (!checkLatLonValidity(latitude, longitude)) {
 		return false;
 	}
@@ -174,13 +183,14 @@ bool Ekf::resetLatLonTo(const double latitude, const double longitude, const flo
 	Vector2f pos_prev;
 
 	if (!_local_origin_lat_lon.isInitialized()) {
+		// 如果本地原点尚未初始化，则构造一个临时的(0,0)投影，然后获得之前的pos_prev
 		MapProjection zero_ref;
 		zero_ref.initReference(0.0, 0.0);
 		pos_prev = zero_ref.project(_gpos.latitude_deg(), _gpos.longitude_deg());
 
 		_local_origin_lat_lon.initReference(latitude, longitude, _time_delayed_us);
 
-		// if we are already doing aiding, correct for the change in position since the EKF started navigating
+		// 如果已经在进行定位融合，则矫正当前位置使其与新原点相一致
 		if (isLocalHorizontalPositionValid()) {
 			double est_lat;
 			double est_lon;
@@ -192,12 +202,15 @@ bool Ekf::resetLatLonTo(const double latitude, const double longitude, const flo
 			 _local_origin_lat_lon.getProjectionReferenceLat(), _local_origin_lat_lon.getProjectionReferenceLon());
 
 	} else {
+		// 如果已经有了原点，则先记录当前pos_prev
 		pos_prev = _local_origin_lat_lon.project(_gpos.latitude_deg(), _gpos.longitude_deg());
 	}
 
+	// 更新全局位置经纬度
 	_gpos.setLatLonDeg(latitude, longitude);
 	_output_predictor.resetLatLonTo(latitude, longitude);
 
+	// 计算新的局部位置，并更新重置状态
 	const Vector2f delta_horz_pos = getLocalHorizontalPosition() - pos_prev;
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
@@ -206,11 +219,12 @@ bool Ekf::resetLatLonTo(const double latitude, const double longitude, const flo
 
 	updateHorizontalPositionResetStatus(delta_horz_pos);
 
+	// 如果传入了水平方向的方差，则进行协方差矩阵更新
 	if (PX4_ISFINITE(hpos_var)) {
 		P.uncorrelateCovarianceSetVariance<2>(State::pos.idx, math::max(sq(0.01f), hpos_var));
 	}
 
-	// Reset the timout timer
+	// 更新水平位置融合时间戳
 	_time_last_hor_pos_fuse = _time_delayed_us;
 
 	return true;
@@ -218,11 +232,13 @@ bool Ekf::resetLatLonTo(const double latitude, const double longitude, const flo
 
 bool Ekf::initialiseAltitudeTo(const float altitude, const float vpos_var)
 {
+	// 如果海拔高度有效，则用该值初始化垂直方向位置
 	if (!checkAltitudeValidity(altitude)) {
 		return false;
 	}
 
 	if (!PX4_ISFINITE(_local_origin_alt)) {
+		// 如果还没有本地原点的海拔信息
 		const float local_alt_prev = _gpos.altitude();
 
 		if (isLocalVerticalPositionValid()) {
@@ -235,6 +251,7 @@ bool Ekf::initialiseAltitudeTo(const float altitude, const float vpos_var)
 		ECL_INFO("Origin alt=%.3f", (double)_local_origin_alt);
 	}
 
+	// 重置到指定altitude并更新协方差
 	resetAltitudeTo(altitude, vpos_var);
 
 	return true;
@@ -242,6 +259,8 @@ bool Ekf::initialiseAltitudeTo(const float altitude, const float vpos_var)
 
 void Ekf::get_ekf_gpos_accuracy(float *ekf_eph, float *ekf_epv) const
 {
+	// 获取EKF全局位置（GPS坐标系）在水平方向和垂直方向的精度，
+	// 如果没有全局原点，则返回无穷大
 	if (global_origin_valid()) {
 		get_ekf_lpos_accuracy(ekf_eph, ekf_epv);
 
@@ -253,27 +272,25 @@ void Ekf::get_ekf_gpos_accuracy(float *ekf_eph, float *ekf_epv) const
 
 void Ekf::get_ekf_lpos_accuracy(float *ekf_eph, float *ekf_epv) const
 {
-	// TODO - allow for baro drift in vertical position error
+	// 获取EKF在局部坐标系下的位置精度
+	// 水平精度通过状态协方差矩阵的pos部分（前2维）计算
+	// 垂直精度通过pos的第三维（对应高度）
+
 	float hpos_err = sqrtf(P.trace<2>(State::pos.idx));
 
-	// If we are dead-reckoning for too long, use the innovations as a conservative alternate measure of the horizontal position error
-	// The reason is that complete rejection of measurements is often caused by heading misalignment or inertial sensing errors
-	// and using state variances for accuracy reporting is overly optimistic in these situations
+	// 如果水平方向长时间处于纯惯性推算（deadreckoning），那么可能是因为存在陀螺或加速度传感器不可靠问题
+	// 此时仅用状态协方差来估计误差可能过于乐观，可将位置创新作为另一种保守的估计
 	if (_horizontal_deadreckon_time_exceeded) {
 #if defined(CONFIG_EKF2_GNSS)
-
 		if (_control_status.flags.gps) {
 			hpos_err = math::max(hpos_err, Vector2f(_aid_src_gnss_pos.innovation).norm());
 		}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 		if (_control_status.flags.ev_pos) {
 			hpos_err = math::max(hpos_err, Vector2f(_aid_src_ev_pos.innovation).norm());
 		}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 	}
 
@@ -283,33 +300,30 @@ void Ekf::get_ekf_lpos_accuracy(float *ekf_eph, float *ekf_epv) const
 
 void Ekf::get_ekf_vel_accuracy(float *ekf_evh, float *ekf_evv) const
 {
+	// 获取EKF在局部坐标系下的速度精度
+	// 水平速度误差通过状态协方差矩阵的vel部分（前2维）计算
+	// 垂直速度误差通过vel的第三维
+
 	float hvel_err = sqrtf(P.trace<2>(State::vel.idx));
 
-	// If we are dead-reckoning for too long, use the innovations as a conservative alternate measure of the horizontal velocity error
-	// The reason is that complete rejection of measurements is often caused by heading misalignment or inertial sensing errors
-	// and using state variances for accuracy reporting is overly optimistic in these situations
+	// 如果水平方向长时间处于纯惯性推算（deadreckoning），则同样考虑保守的基于创新的估计
 	if (_horizontal_deadreckon_time_exceeded) {
 		float vel_err_conservative = 0.0f;
 
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
-
 		if (_control_status.flags.opt_flow) {
 			float gndclearance = math::max(_params.rng_gnd_clearance, 0.1f);
 			vel_err_conservative = math::max(getHagl(), gndclearance) * Vector2f(_aid_src_optical_flow.innovation).norm();
 		}
-
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
 #if defined(CONFIG_EKF2_GNSS)
-
 		if (_control_status.flags.gps) {
 			vel_err_conservative = math::max(vel_err_conservative, Vector2f(_aid_src_gnss_pos.innovation).norm());
 		}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 		if (_control_status.flags.ev_pos) {
 			vel_err_conservative = math::max(vel_err_conservative, Vector2f(_aid_src_ev_pos.innovation).norm());
 		}
@@ -317,7 +331,6 @@ void Ekf::get_ekf_vel_accuracy(float *ekf_evh, float *ekf_evv) const
 		if (_control_status.flags.ev_vel) {
 			vel_err_conservative = math::max(vel_err_conservative, Vector2f(_aid_src_ev_vel.innovation).norm());
 		}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 		hvel_err = math::max(hvel_err, vel_err_conservative);
@@ -328,9 +341,11 @@ void Ekf::get_ekf_vel_accuracy(float *ekf_evh, float *ekf_evv) const
 }
 
 void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, float *hagl_max_z,
-			      float *hagl_max_xy) const
+	      float *hagl_max_xy) const
 {
-	// Do not require limiting by default
+	// 该函数用于获取系统在控制层面所可能需要的限制，如最大速度、最小或最大高度等
+	// 初始置为NAN表示不受限制
+
 	*vxy_max = NAN;
 	*vz_max = NAN;
 	*hagl_min = NAN;
@@ -338,13 +353,13 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 	*hagl_max_xy = NAN;
 
 #if defined(CONFIG_EKF2_RANGE_FINDER)
-	// Calculate range finder limits
+	// 如果使用了激光或超声波测距仪，可提供距离地面信息（HAGL）
+	// 这里给出测距仪的最小和最大测距，以便飞控做限高
 	const float rangefinder_hagl_min = _range_sensor.getValidMinVal();
-
-	// Allow use of 90% of rangefinder maximum range to allow for angular motion
+	// 为了保留一定余量，最大距离只用测距仪满量程的90%
 	const float rangefinder_hagl_max = 0.9f * _range_sensor.getValidMaxVal();
 
-	// TODO : calculate visual odometry limits
+	// 标记仅依赖测距仪进行垂直高度融合的状态
 	const bool relying_on_rangefinder = isOnlyActiveSourceOfVerticalPositionAiding(_control_status.flags.rng_hgt);
 
 	if (relying_on_rangefinder) {
@@ -353,15 +368,15 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 	}
 
 # if defined(CONFIG_EKF2_OPTICAL_FLOW)
-	// Keep within flow AND range sensor limits when exclusively using optical flow
+	// 如果使用光流，结合测距仪进行高度和速度限制
 	const bool relying_on_optical_flow = isOnlyActiveSourceOfHorizontalAiding(_control_status.flags.opt_flow);
 
 	if (relying_on_optical_flow) {
-		// Calculate optical flow limits
+		// 计算光流能够正常工作的高度范围
 		float flow_hagl_min = _flow_min_distance;
 		float flow_hagl_max = _flow_max_distance;
 
-		// only limit optical flow height is dependent on range finder or terrain estimate invalid (precaution)
+		// 如果没有地形估计或者地形信息不可靠，则取测距仪的范围作为补偿
 		if ((!_control_status.flags.opt_flow_terrain && _control_status.flags.rng_terrain)
 		    || !isTerrainEstimateValid()
 		   ) {
@@ -371,7 +386,7 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 
 		const float flow_constrained_height = math::constrain(getHagl(), flow_hagl_min, flow_hagl_max);
 
-		// Allow ground relative velocity to use 50% of available flow sensor range to allow for angular motion
+		// 允许地面相对速度使用传感器量程50%的范围，保留部分余量应对角度变化
 		float flow_vxy_max = 0.5f * _flow_max_rate * flow_constrained_height;
 		flow_hagl_max = math::max(flow_hagl_max * 0.9f, flow_hagl_max - 1.0f);
 
@@ -387,7 +402,7 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 
 void Ekf::resetGyroBias()
 {
-	// Zero the gyro bias states
+	// 将陀螺仪偏置置零
 	_state.gyro_bias.zero();
 
 	resetGyroBiasCov();
@@ -395,7 +410,7 @@ void Ekf::resetGyroBias()
 
 void Ekf::resetAccelBias()
 {
-	// Zero the accel bias states
+	// 将加速度计偏置置零
 	_state.accel_bias.zero();
 
 	resetAccelBiasCov();
@@ -403,33 +418,28 @@ void Ekf::resetAccelBias()
 
 float Ekf::getHeadingInnovationTestRatio() const
 {
-	// return the largest heading innovation test ratio
+	// 获取航向角创新向量的最大检验比值(innovation test ratio)
+	// 如果没有可用的航向数据来源，则返回NaN
 	float test_ratio = -1.f;
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
 		for (auto &test_ratio_filtered : _aid_src_mag.test_ratio_filtered) {
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
-
 	if (_control_status.flags.gnss_yaw) {
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_yaw.test_ratio_filtered));
 	}
-
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_yaw) {
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_yaw.test_ratio_filtered));
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
@@ -441,37 +451,31 @@ float Ekf::getHeadingInnovationTestRatio() const
 
 float Ekf::getHorizontalVelocityInnovationTestRatio() const
 {
-	// return the largest velocity innovation test ratio
+	// 返回与水平速度相关的创新检验比值的最大值
 	float test_ratio = -1.f;
 
 #if defined(CONFIG_EKF2_GNSS)
-
 	if (_control_status.flags.gps) {
-		for (int i = 0; i < 2; i++) { // only xy
+		for (int i = 0; i < 2; i++) {
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[i]));
 		}
 	}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_vel) {
-		for (int i = 0; i < 2; i++) { // only xy
+		for (int i = 0; i < 2; i++) {
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[i]));
 		}
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
-
 	if (isOnlyActiveSourceOfHorizontalAiding(_control_status.flags.opt_flow)) {
 		for (auto &test_ratio_filtered : _aid_src_optical_flow.test_ratio_filtered) {
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
-
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
@@ -483,23 +487,19 @@ float Ekf::getHorizontalVelocityInnovationTestRatio() const
 
 float Ekf::getVerticalVelocityInnovationTestRatio() const
 {
-	// return the largest velocity innovation test ratio
+	// 返回与垂直速度相关的创新检验比值的最大值
 	float test_ratio = -1.f;
 
 #if defined(CONFIG_EKF2_GNSS)
-
 	if (_control_status.flags.gps) {
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[2]));
 	}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_vel) {
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[2]));
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
@@ -511,35 +511,29 @@ float Ekf::getVerticalVelocityInnovationTestRatio() const
 
 float Ekf::getHorizontalPositionInnovationTestRatio() const
 {
-	// return the largest position innovation test ratio
+	// 返回与水平位置相关的创新检验比值的最大值
 	float test_ratio = -1.f;
 
 #if defined(CONFIG_EKF2_GNSS)
-
 	if (_control_status.flags.gps) {
 		for (auto &test_ratio_filtered : _aid_src_gnss_pos.test_ratio_filtered) {
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_pos) {
 		for (auto &test_ratio_filtered : _aid_src_ev_pos.test_ratio_filtered) {
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_AUX_GLOBAL_POSITION) && defined(MODULE_NAME)
-
 	if (_control_status.flags.aux_gpos) {
 		test_ratio = math::max(test_ratio, fabsf(_aux_global_position.test_ratio_filtered()));
 	}
-
 #endif // CONFIG_EKF2_AUX_GLOBAL_POSITION
 
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
@@ -551,44 +545,37 @@ float Ekf::getHorizontalPositionInnovationTestRatio() const
 
 float Ekf::getVerticalPositionInnovationTestRatio() const
 {
-	// return the combined vertical position innovation test ratio
+	// 返回垂直方向位置相关的平均创新检验比值
+	// 当多个高度来源（气压、高度、光学、视觉等）时，对它们的创新进行综合考虑
 	float hgt_sum = 0.f;
 	int n_hgt_sources = 0;
 
 #if defined(CONFIG_EKF2_BAROMETER)
-
 	if (_control_status.flags.baro_hgt) {
 		hgt_sum += sqrtf(fabsf(_aid_src_baro_hgt.test_ratio_filtered));
 		n_hgt_sources++;
 	}
-
 #endif // CONFIG_EKF2_BAROMETER
 
 #if defined(CONFIG_EKF2_GNSS)
-
 	if (_control_status.flags.gps_hgt) {
 		hgt_sum += sqrtf(fabsf(_aid_src_gnss_hgt.test_ratio_filtered));
 		n_hgt_sources++;
 	}
-
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_RANGE_FINDER)
-
 	if (_control_status.flags.rng_hgt) {
 		hgt_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered));
 		n_hgt_sources++;
 	}
-
 #endif // CONFIG_EKF2_RANGE_FINDER
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_hgt) {
 		hgt_sum += sqrtf(fabsf(_aid_src_ev_hgt.test_ratio_filtered));
 		n_hgt_sources++;
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	if (n_hgt_sources > 0) {
@@ -600,13 +587,11 @@ float Ekf::getVerticalPositionInnovationTestRatio() const
 
 float Ekf::getAirspeedInnovationTestRatio() const
 {
+	// 返回空速融合相关的创新检验比值，如果未融合空速，则返回NAN
 #if defined(CONFIG_EKF2_AIRSPEED)
-
 	if (_control_status.flags.fuse_aspd) {
-		// return the airspeed fusion innovation test ratio
 		return sqrtf(fabsf(_aid_src_airspeed.test_ratio_filtered));
 	}
-
 #endif // CONFIG_EKF2_AIRSPEED
 
 	return NAN;
@@ -614,13 +599,11 @@ float Ekf::getAirspeedInnovationTestRatio() const
 
 float Ekf::getSyntheticSideslipInnovationTestRatio() const
 {
+	// 返回合成侧滑角融合相关的创新检验比值
 #if defined(CONFIG_EKF2_SIDESLIP)
-
 	if (_control_status.flags.fuse_beta) {
-		// return the synthetic sideslip innovation test ratio
 		return sqrtf(fabsf(_aid_src_sideslip.test_ratio_filtered));
 	}
-
 #endif // CONFIG_EKF2_SIDESLIP
 
 	return NAN;
@@ -628,29 +611,25 @@ float Ekf::getSyntheticSideslipInnovationTestRatio() const
 
 float Ekf::getHeightAboveGroundInnovationTestRatio() const
 {
-	// return the combined HAGL innovation test ratio
+	// 返回地面高度（HAGL）相关的创新检验比值
 	float hagl_sum = 0.f;
 	int n_hagl_sources = 0;
 
 #if defined(CONFIG_EKF2_TERRAIN)
 
 # if defined(CONFIG_EKF2_OPTICAL_FLOW)
-
 	if (_control_status.flags.opt_flow_terrain) {
 		hagl_sum += sqrtf(math::max(fabsf(_aid_src_optical_flow.test_ratio_filtered[0]),
-					    _aid_src_optical_flow.test_ratio_filtered[1]));
+			    _aid_src_optical_flow.test_ratio_filtered[1]));
 		n_hagl_sources++;
 	}
-
 # endif // CONFIG_EKF2_OPTICAL_FLOW
 
 # if defined(CONFIG_EKF2_RANGE_FINDER)
-
 	if (_control_status.flags.rng_terrain) {
 		hagl_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered));
 		n_hagl_sources++;
 	}
-
 # endif // CONFIG_EKF2_RANGE_FINDER
 
 #endif // CONFIG_EKF2_TERRAIN
@@ -664,7 +643,8 @@ float Ekf::getHeightAboveGroundInnovationTestRatio() const
 
 uint16_t Ekf::get_ekf_soln_status() const
 {
-	// LEGACY Mavlink bitmask containing state of estimator solution (see Mavlink ESTIMATOR_STATUS_FLAGS)
+	// 这里返回一个16位的状态标志，用于表示EKF不同维度的解是否可靠
+	// 与Mavlink中的ESTIMATOR_STATUS_FLAGS对应
 	union ekf_solution_status_u {
 		struct {
 			uint16_t attitude           : 1;
@@ -683,47 +663,47 @@ uint16_t Ekf::get_ekf_soln_status() const
 		uint16_t value;
 	} soln_status{};
 
-	// 1	ESTIMATOR_ATTITUDE	True if the attitude estimate is good
+	// attitude：是否获得可靠的姿态估计
 	soln_status.flags.attitude = attitude_valid();
 
-	// 2	ESTIMATOR_VELOCITY_HORIZ	True if the horizontal velocity estimate is good
+	// velocity_horiz：是否获得可靠的水平速度估计
 	soln_status.flags.velocity_horiz = isLocalHorizontalPositionValid();
 
-	// 4	ESTIMATOR_VELOCITY_VERT	True if the vertical velocity estimate is good
+	// velocity_vert：是否获得可靠的垂直速度估计
 	soln_status.flags.velocity_vert = isLocalVerticalVelocityValid() || isLocalVerticalPositionValid();
 
-	// 8	ESTIMATOR_POS_HORIZ_REL	True if the horizontal position (relative) estimate is good
+	// pos_horiz_rel：是否获得相对水平位置估计
 	soln_status.flags.pos_horiz_rel = isLocalHorizontalPositionValid();
 
-	// 16	ESTIMATOR_POS_HORIZ_ABS	True if the horizontal position (absolute) estimate is good
+	// pos_horiz_abs：是否获得绝对水平位置估计
 	soln_status.flags.pos_horiz_abs = isGlobalHorizontalPositionValid();
 
-	// 32	ESTIMATOR_POS_VERT_ABS	True if the vertical position (absolute) estimate is good
+	// pos_vert_abs：是否有绝对的垂直位置估计
 	soln_status.flags.pos_vert_abs = isVerticalAidingActive();
 
-	// 64	ESTIMATOR_POS_VERT_AGL	True if the vertical position (above ground) estimate is good
+	// pos_vert_agl：是否估计了距地高度
 #if defined(CONFIG_EKF2_TERRAIN)
 	soln_status.flags.pos_vert_agl = isTerrainEstimateValid();
 #endif // CONFIG_EKF2_TERRAIN
 
-	// 128	ESTIMATOR_CONST_POS_MODE	True if the EKF is in a constant position mode and is not using external measurements (eg GPS or optical flow)
+	// const_pos_mode：当外部传感器不可用时是否维持了一个静止的模式
 	soln_status.flags.const_pos_mode = _control_status.flags.fake_pos || _control_status.flags.valid_fake_pos
-					   || _control_status.flags.vehicle_at_rest;
+				       || _control_status.flags.vehicle_at_rest;
 
-	// 256	ESTIMATOR_PRED_POS_HORIZ_REL	True if the EKF has sufficient data to enter a mode that will provide a (relative) position estimate
+	// pred_pos_horiz_rel：是否有足够的数据来输出相对水平位置预测
 	soln_status.flags.pred_pos_horiz_rel = isHorizontalAidingActive();
 
-	// 512	ESTIMATOR_PRED_POS_HORIZ_ABS	True if the EKF has sufficient data to enter a mode that will provide a (absolute) position estimate
+	// pred_pos_horiz_abs：是否有足够的数据来输出绝对水平位置预测
 	soln_status.flags.pred_pos_horiz_abs = _control_status.flags.gps || _control_status.flags.aux_gpos;
 
-	// 1024	ESTIMATOR_GPS_GLITCH	True if the EKF has detected a GPS glitch
+	// gps_glitch：是否检测到GPS故障
 #if defined(CONFIG_EKF2_GNSS)
 	const bool gps_vel_innov_bad = Vector3f(_aid_src_gnss_vel.test_ratio).max() > 1.f;
 	const bool gps_pos_innov_bad = Vector2f(_aid_src_gnss_pos.test_ratio).max() > 1.f;
 	soln_status.flags.gps_glitch = (gps_vel_innov_bad || gps_pos_innov_bad);
 #endif // CONFIG_EKF2_GNSS
 
-	// 2048	ESTIMATOR_ACCEL_ERROR	True if the EKF has detected bad accelerometer data
+	// accel_error：是否检测到加速度计故障
 	soln_status.flags.accel_error = _fault_status.flags.bad_acc_vertical || _fault_status.flags.bad_acc_clipping;
 
 	return soln_status.value;
@@ -731,81 +711,90 @@ uint16_t Ekf::get_ekf_soln_status() const
 
 void Ekf::fuse(const VectorState &K, float innovation)
 {
-	// quat_nominal
+	// 进行单个观测量的融合更新，K为增益，innovation为该观测量与状态预测的残差
+	// 这里逐个状态进行更新，包括姿态、速度、位置、陀螺偏置、加速度偏置等
+
+	// 姿态更新：通过旋转向量(小量)delta_quat对四元数进行修正
 	Quatf delta_quat(matrix::AxisAnglef(K.slice<State::quat_nominal.dof, 1>(State::quat_nominal.idx,
-					    0) * (-1.f * innovation)));
+				    0) * (-1.f * innovation)));
 	_state.quat_nominal = delta_quat * _state.quat_nominal;
 	_state.quat_nominal.normalize();
 	_R_to_earth = Dcmf(_state.quat_nominal);
 
-	// vel
+	// 速度更新
 	_state.vel = matrix::constrain(_state.vel - K.slice<State::vel.dof, 1>(State::vel.idx, 0) * innovation, -1.e3f, 1.e3f);
 
-	// pos
+	// 位置更新
 	const Vector3f pos_correction = K.slice<State::pos.dof, 1>(State::pos.idx, 0) * (-innovation);
 
-	// Accumulate position in global coordinates
+	// 将位置累积到全局坐标的_gpos上
 	_gpos += pos_correction;
 	_state.pos.zero();
-	// Also store altitude in the state vector as this is used for optical flow fusion
+	// 由于在NED坐标系中z为负值，因此用_gpos.altitude()对pos(2)进行更新
 	_state.pos(2) = -_gpos.altitude();
 
-	// gyro_bias
-	_state.gyro_bias = matrix::constrain(_state.gyro_bias - K.slice<State::gyro_bias.dof, 1>(State::gyro_bias.idx,
-					     0) * innovation,
-					     -getGyroBiasLimit(), getGyroBiasLimit());
+	// 陀螺仪偏置更新
+	_state.gyro_bias = matrix::constrain(
+		_state.gyro_bias - K.slice<State::gyro_bias.dof, 1>(State::gyro_bias.idx, 0) * innovation,
+		-getGyroBiasLimit(), getGyroBiasLimit()
+	);
 
-	// accel_bias
-	_state.accel_bias = matrix::constrain(_state.accel_bias - K.slice<State::accel_bias.dof, 1>(State::accel_bias.idx,
-					      0) * innovation,
-					      -getAccelBiasLimit(), getAccelBiasLimit());
+	// 加速度计偏置更新
+	_state.accel_bias = matrix::constrain(
+		_state.accel_bias - K.slice<State::accel_bias.dof, 1>(State::accel_bias.idx, 0) * innovation,
+		-getAccelBiasLimit(), getAccelBiasLimit()
+	);
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-
-	// mag_I, mag_B
+	// 磁场在惯性坐标系（地理坐标系）和机体坐标系中的偏置更新
 	if (_control_status.flags.mag) {
-		_state.mag_I = matrix::constrain(_state.mag_I - K.slice<State::mag_I.dof, 1>(State::mag_I.idx, 0) * innovation, -1.f,
-						 1.f);
-		_state.mag_B = matrix::constrain(_state.mag_B - K.slice<State::mag_B.dof, 1>(State::mag_B.idx, 0) * innovation,
-						 -getMagBiasLimit(), getMagBiasLimit());
+		_state.mag_I = matrix::constrain(
+			_state.mag_I - K.slice<State::mag_I.dof, 1>(State::mag_I.idx, 0) * innovation,
+			-1.f,
+			1.f);
+		_state.mag_B = matrix::constrain(
+			_state.mag_B - K.slice<State::mag_B.dof, 1>(State::mag_B.idx, 0) * innovation,
+			-getMagBiasLimit(), getMagBiasLimit()
+		);
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_WIND)
-
-	// wind_vel
+	// 风速的更新
 	if (_control_status.flags.wind) {
-		_state.wind_vel = matrix::constrain(_state.wind_vel - K.slice<State::wind_vel.dof, 1>(State::wind_vel.idx,
-						    0) * innovation, -1.e2f, 1.e2f);
+		_state.wind_vel = matrix::constrain(
+			_state.wind_vel - K.slice<State::wind_vel.dof, 1>(State::wind_vel.idx, 0) * innovation,
+			-1.e2f, 1.e2f);
 	}
-
 #endif // CONFIG_EKF2_WIND
 
 #if defined(CONFIG_EKF2_TERRAIN)
+	// 地形高度更新
 	_state.terrain = math::constrain(_state.terrain - K(State::terrain.idx) * innovation, -1e4f, 1e4f);
 #endif // CONFIG_EKF2_TERRAIN
 }
 
 void Ekf::updateDeadReckoningStatus()
 {
+	// 更新水平和垂直方向是否处于纯惯性推算(deadrk)的状态
 	updateHorizontalDeadReckoningstatus();
 	updateVerticalDeadReckoningStatus();
 }
 
 void Ekf::updateHorizontalDeadReckoningstatus()
 {
+	// 如果在水平速度或位置上无任何外部传感器的有效融合，则标记为惯性推算
 	bool inertial_dead_reckoning = true;
 	bool aiding_expected_in_air = false;
 
-	// velocity aiding active
+	// 如果存在GPS或外部视觉的速度融合，并且没有超时，则不处于纯惯性推算
 	if ((_control_status.flags.gps || _control_status.flags.ev_vel)
 	    && isRecent(_time_last_hor_vel_fuse, _params.no_aid_timeout_max)
 	   ) {
 		inertial_dead_reckoning = false;
 	}
 
-	// position aiding active
+	// 如果存在GPS或外部视觉的位置信息融合，并且没有超时，则不处于纯惯性推算
 	if ((_control_status.flags.gps || _control_status.flags.ev_pos || _control_status.flags.aux_gpos)
 	    && isRecent(_time_last_hor_pos_fuse, _params.no_aid_timeout_max)
 	   ) {
@@ -813,68 +802,62 @@ void Ekf::updateHorizontalDeadReckoningstatus()
 	}
 
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
-
-	// optical flow active
+	// 如果只依赖光流来提供水平信息，并且光流数据没有超时，则不处于纯惯性推算
 	if (_control_status.flags.opt_flow
 	    && isRecent(_aid_src_optical_flow.time_last_fuse, _params.no_aid_timeout_max)
 	   ) {
 		inertial_dead_reckoning = false;
 
 	} else {
+		// 如果着陆状态下，但参数(flow_ctrl==1)，说明离地起飞后会尝试使用光流
 		if (!_control_status.flags.in_air && (_params.flow_ctrl == 1)
 		    && isRecent(_aid_src_optical_flow.timestamp_sample, _params.no_aid_timeout_max)
 		   ) {
-			// currently landed, but optical flow aiding should be possible once in air
 			aiding_expected_in_air = true;
 		}
 	}
-
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
 #if defined(CONFIG_EKF2_AIRSPEED)
-
-	// air data aiding active
+	// 如果通过空速和侧滑角来进行风速的估计，可以在没有其他水平传感器时依赖它们
 	if ((_control_status.flags.fuse_aspd && isRecent(_aid_src_airspeed.time_last_fuse, _params.no_aid_timeout_max))
 	    && (_control_status.flags.fuse_beta && isRecent(_aid_src_sideslip.time_last_fuse, _params.no_aid_timeout_max))
 	   ) {
-		// wind_dead_reckoning: no other aiding but air data
+		// 此时wind_dead_reckoning表示只有风信息但无其他水平位置或速度来源
 		_control_status.flags.wind_dead_reckoning = inertial_dead_reckoning;
-
-		// air data aiding is active, we're not inertial dead reckoning
 		inertial_dead_reckoning = false;
 
 	} else {
 		_control_status.flags.wind_dead_reckoning = false;
 
 		if (!_control_status.flags.in_air && _control_status.flags.fixed_wing
-		    && (_params.beta_fusion_enabled == 1)
-		    && (_params.arsp_thr > 0.f) && isRecent(_aid_src_airspeed.timestamp_sample, _params.no_aid_timeout_max)
-		   ) {
-			// currently landed, but air data aiding should be possible once in air
+	    && (_params.beta_fusion_enabled == 1)
+	    && (_params.arsp_thr > 0.f) && isRecent(_aid_src_airspeed.timestamp_sample, _params.no_aid_timeout_max)
+	   ) {
+			// 若在地面且是固定翼，说明离地后可能使用空速融合
 			aiding_expected_in_air = true;
 		}
 	}
-
 #endif // CONFIG_EKF2_AIRSPEED
 
-	// zero velocity update
+	// 零速度更新，如果只依赖地面状态而缺少其他的飞行中传感器，不能视为在空中可用
 	if (isRecent(_zero_velocity_update.time_last_fuse(), _params.no_aid_timeout_max)) {
-		// only respect as a valid aiding source now if we expect to have another valid source once in air
 		if (aiding_expected_in_air) {
 			inertial_dead_reckoning = false;
 		}
 	}
 
+	// 假位置融合
 	if (_control_status.flags.valid_fake_pos && isRecent(_aid_src_fake_pos.time_last_fuse, _params.no_aid_timeout_max)) {
-		// only respect as a valid aiding source now if we expect to have another valid source once in air
 		if (aiding_expected_in_air) {
 			inertial_dead_reckoning = false;
 		}
 	}
 
+	// 如果一直是惯性推算，则检查时间是否超过阈值
 	if (inertial_dead_reckoning) {
 		if (isTimedOut(_time_last_horizontal_aiding, (uint64_t)_params.valid_timeout_max)) {
-			// deadreckon time exceeded
+			// 水平惯性导航时间过长
 			if (!_horizontal_deadreckon_time_exceeded) {
 				ECL_WARN("horizontal dead reckon time exceeded");
 				_horizontal_deadreckon_time_exceeded = true;
@@ -882,12 +865,12 @@ void Ekf::updateHorizontalDeadReckoningstatus()
 		}
 
 	} else {
+		// 如果有传感器数据，则刷新_time_last_horizontal_aiding
 		if (_time_delayed_us > _params.no_aid_timeout_max) {
 			_time_last_horizontal_aiding = _time_delayed_us - _params.no_aid_timeout_max;
 		}
 
 		_horizontal_deadreckon_time_exceeded = false;
-
 	}
 
 	_control_status.flags.inertial_dead_reckoning = inertial_dead_reckoning;
@@ -895,6 +878,7 @@ void Ekf::updateHorizontalDeadReckoningstatus()
 
 void Ekf::updateVerticalDeadReckoningStatus()
 {
+	// 判断垂直方向是否只有惯性推算
 	if (isVerticalPositionAidingActive()) {
 		_time_last_v_pos_aiding = _time_last_hgt_fuse;
 		_vertical_position_deadreckon_time_exceeded = false;
@@ -916,23 +900,28 @@ void Ekf::updateVerticalDeadReckoningStatus()
 
 Vector3f Ekf::getRotVarBody() const
 {
+	// 获取机体坐标系下的姿态协方差对角线，首先从状态中提取姿态的协方差(在NED坐标系)，
+	// 然后转换到机体系下得到机体系的姿态方差
 	const matrix::SquareMatrix3f rot_cov_body = getStateCovariance<State::quat_nominal>();
 	return matrix::SquareMatrix3f(_R_to_earth.T() * rot_cov_body * _R_to_earth).diag();
 }
 
 Vector3f Ekf::getRotVarNed() const
 {
+	// 获取在NED坐标系下的姿态方差对角项
 	const matrix::SquareMatrix3f rot_cov_ned = getStateCovariance<State::quat_nominal>();
 	return rot_cov_ned.diag();
 }
 
 float Ekf::getYawVar() const
 {
+	// 返回偏航方向的方差
 	return getRotVarNed()(2);
 }
 
 float Ekf::getTiltVariance() const
 {
+	// 返回俯仰和横滚（倾斜）的总方差，即NED姿态方差的前两个分量之和
 	const Vector3f rot_var_ned = getRotVarNed();
 	return rot_var_ned(0) + rot_var_ned(1);
 }
@@ -940,22 +929,22 @@ float Ekf::getTiltVariance() const
 #if defined(CONFIG_EKF2_BAROMETER)
 void Ekf::updateGroundEffect()
 {
+	// 更新地效标志，当飞行器在多旋翼悬停时，如果飞得够低，可能触发地效补偿
 	if (_control_status.flags.in_air && !_control_status.flags.fixed_wing) {
 #if defined(CONFIG_EKF2_TERRAIN)
-
 		if (isTerrainEstimateValid()) {
-			// automatically set ground effect if terrain is valid
+			// 如果地形估计有效，就可以基于HAGL判断是否处于地效
 			float height = getHagl();
 			_control_status.flags.gnd_effect = (height < _params.gnd_effect_max_hgt);
 
 		} else
 #endif // CONFIG_EKF2_TERRAIN
 			if (_control_status.flags.gnd_effect) {
-				// Turn off ground effect compensation if it times out
-				if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
-					_control_status.flags.gnd_effect = false;
-				}
+			// 如果当前标记处于地效，但已经超时，则关闭地效标记
+			if (isTimedOut(_time_last_gnd_effect_on, GNDEFFECT_TIMEOUT)) {
+				_control_status.flags.gnd_effect = false;
 			}
+		}
 
 	} else {
 		_control_status.flags.gnd_effect = false;
@@ -966,47 +955,50 @@ void Ekf::updateGroundEffect()
 
 void Ekf::updateIMUBiasInhibit(const imuSample &imu_delayed)
 {
-	// inhibit learning of imu accel bias if the manoeuvre levels are too high to protect against the effect of sensor nonlinearities or bad accel data is detected
-	// xy accel bias learning is also disabled on ground as those states are poorly observable when perpendicular to the gravity vector
-	{
-		const Vector3f gyro_corrected = imu_delayed.delta_ang / imu_delayed.delta_ang_dt - _state.gyro_bias;
-
-		const float alpha = math::constrain((imu_delayed.delta_ang_dt / _params.acc_bias_learn_tc), 0.f, 1.f);
-		const float beta = 1.f - alpha;
-
-		_ang_rate_magnitude_filt = fmaxf(gyro_corrected.norm(), beta * _ang_rate_magnitude_filt);
-	}
+	// 当机动状态过于剧烈时，或者加速度传感器数据异常时，需要禁止更新IMU偏置(陀螺仪和加速度计)
+	// 以免导致在极端状态下的融合产生错误
 
 	{
-		const Vector3f accel_corrected = imu_delayed.delta_vel / imu_delayed.delta_vel_dt - _state.accel_bias;
+	// 计算校正后的陀螺仪角速度，得到其幅值，并进行低通或滑窗滤波
+	// 如果陀螺仪数据过大，说明在进行剧烈机动
+	const Vector3f gyro_corrected = imu_delayed.delta_ang / imu_delayed.delta_ang_dt - _state.gyro_bias;
 
-		const float alpha = math::constrain((imu_delayed.delta_vel_dt / _params.acc_bias_learn_tc), 0.f, 1.f);
-		const float beta = 1.f - alpha;
+	const float alpha = math::constrain((imu_delayed.delta_ang_dt / _params.acc_bias_learn_tc), 0.f, 1.f);
+	const float beta = 1.f - alpha;
+
+	_ang_rate_magnitude_filt = fmaxf(gyro_corrected.norm(), beta * _ang_rate_magnitude_filt);
+}
+{
+	// 同样计算校正后的加速度幅值
+	const Vector3f accel_corrected = imu_delayed.delta_vel / imu_delayed.delta_vel_dt - _state.accel_bias;
+
+	const float alpha = math::constrain((imu_delayed.delta_vel_dt / _params.acc_bias_learn_tc), 0.f, 1.f);
+	const float beta = 1.f - alpha;
 
 		_accel_magnitude_filt = fmaxf(accel_corrected.norm(), beta * _accel_magnitude_filt);
 	}
 
-
+	// 如果机动剧烈超过阈值，认为此时偏置估计不可靠
 	const bool is_manoeuvre_level_high = (_ang_rate_magnitude_filt > _params.acc_bias_learn_gyr_lim)
-					     || (_accel_magnitude_filt > _params.acc_bias_learn_acc_lim);
+				     || (_accel_magnitude_filt > _params.acc_bias_learn_acc_lim);
 
-
-	// gyro bias inhibit
+	// 对陀螺仪偏置的抑制条件
 	const bool do_inhibit_all_gyro_axes = !(_params.imu_ctrl & static_cast<int32_t>(ImuCtrl::GyroBias));
 
 	for (unsigned index = 0; index < State::gyro_bias.dof; index++) {
-		bool is_bias_observable = true; // TODO: gyro bias conditions
+		bool is_bias_observable = true; // TODO: 将来可根据其他条件判断某个轴是否可观测
 		_gyro_bias_inhibit[index] = do_inhibit_all_gyro_axes || !is_bias_observable;
 	}
 
-	// accel bias inhibit
+	// 对加速度计偏置的抑制条件
 	const bool do_inhibit_all_accel_axes = !(_params.imu_ctrl & static_cast<int32_t>(ImuCtrl::AccelBias))
-					       || is_manoeuvre_level_high
-					       || _fault_status.flags.bad_acc_vertical;
+				       || is_manoeuvre_level_high
+				       || _fault_status.flags.bad_acc_vertical;
 
 	for (unsigned index = 0; index < State::accel_bias.dof; index++) {
 		bool is_bias_observable = true;
 
+		// 如果在地面且只在竖直方向上可观测，也要进行相应的逻辑
 		if (_control_status.flags.vehicle_at_rest) {
 			is_bias_observable = true;
 
@@ -1014,8 +1006,8 @@ void Ekf::updateIMUBiasInhibit(const imuSample &imu_delayed)
 			is_bias_observable = false;
 
 		} else if (_control_status.flags.fake_pos) {
-			// when using fake position (but not fake height) only consider an accel bias observable if aligned with the gravity vector
-			is_bias_observable = (fabsf(_R_to_earth(2, index)) > 0.966f); // cos 15 degrees ~= 0.966
+			// 当只假设位置时，只有与重力方向平行的加速度可观测
+			is_bias_observable = (fabsf(_R_to_earth(2, index)) > 0.966f);
 		}
 
 		_accel_bias_inhibit[index] = do_inhibit_all_accel_axes || imu_delayed.delta_vel_clipping[index] || !is_bias_observable;
@@ -1024,18 +1016,21 @@ void Ekf::updateIMUBiasInhibit(const imuSample &imu_delayed)
 
 void Ekf::fuseDirectStateMeasurement(const float innov, const float innov_var, const float R, const int state_index)
 {
-	VectorState K;  // Kalman gain vector for any single observation - sequential fusion is used.
+	// 直接对某个状态分量进行观测更新，比如高度或其他单一维度量
+	// innvo：创新（残差）， innov_var：创新方差， R：测量噪声方差，state_index：状态量的索引
 
-	// calculate kalman gain K = PHS, where S = 1/innovation variance
+	VectorState K;  // 卡尔曼增益向量
+
+	// 计算卡尔曼增益 K = PHS，其中 S = 1/innov_var
 	for (int row = 0; row < State::size; row++) {
 		K(row) = P(row, state_index) / innov_var;
 	}
 
+	// 根据抑制标记，清除对应状态的增益
 	clearInhibitedStateKalmanGains(K);
 
 #if false
-	// Matrix implementation of the Joseph stabilized covariance update
-	// This is extremely expensive to compute. Use for debugging purposes only.
+	// 以下是Joseph形式的更新，计算开销非常大，仅用于调试
 	auto A = matrix::eye<float, State::size>();
 	VectorState H;
 	H(state_index) = 1.f;
@@ -1046,49 +1041,37 @@ void Ekf::fuseDirectStateMeasurement(const float innov, const float innov_var, c
 	const VectorState KR = K * R;
 	P += KR.multiplyByTranspose(K);
 #else
-	// Efficient implementation of the Joseph stabilized covariance update
-	// Based on "G. J. Bierman. Factorization Methods for Discrete Sequential Estimation. Academic Press, Dover Publications, New York, 1977, 2006"
-	// P = (I - K * H) * P * (I - K * H).T   + K * R * K.T
-	//   =      P_temp     * (I - H.T * K.T) + K * R * K.T
-	//   =      P_temp - P_temp * H.T * K.T  + K * R * K.T
-
-	// Step 1: conventional update
-	// Compute P_temp and store it in P to avoid allocating more memory
-	// P is symmetric, so PH == H.T * P.T == H.T * P. Taking the row is faster as matrices are row-major
+	// 更高效的Joseph稳定形式
 	VectorState PH = P.row(state_index);
-
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j < State::size; j++) {
-			P(i, j) -= K(i) * PH(j); // P is now not symmetric if K is not optimal (e.g.: some gains have been zeroed)
+			P(i, j) -= K(i) * PH(j);
 		}
 	}
 
-	// Step 2: stabilized update
-	// P (or "P_temp") is not symmetric so we must take the column
 	PH = P.col(state_index);
-
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j <= i; j++) {
 			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j);
 			P(j, i) = P(i, j);
 		}
 	}
-
 #endif
 
 	constrainStateVariances();
 
-	// apply the state corrections
+	// 应用状态修正
 	fuse(K, innov);
 }
 
 bool Ekf::measurementUpdate(VectorState &K, const VectorState &H, const float R, const float innovation)
 {
+	// 这一函数用于一般性的一维观测卡尔曼更新，K为增益向量，H为观测模型向量，R为噪声，innovation为观测残差
+
 	clearInhibitedStateKalmanGains(K);
 
 #if false
-	// Matrix implementation of the Joseph stabilized covariance update
-	// This is extremely expensive to compute. Use for debugging purposes only.
+	// Joseph稳定形式，计算代价很大，仅用于调试
 	auto A = matrix::eye<float, State::size>();
 	A -= K.multiplyByTranspose(H);
 	P = A * P;
@@ -1097,44 +1080,33 @@ bool Ekf::measurementUpdate(VectorState &K, const VectorState &H, const float R,
 	const VectorState KR = K * R;
 	P += KR.multiplyByTranspose(K);
 #else
-	// Efficient implementation of the Joseph stabilized covariance update
-	// Based on "G. J. Bierman. Factorization Methods for Discrete Sequential Estimation. Academic Press, Dover Publications, New York, 1977, 2006"
-	// P = (I - K * H) * P * (I - K * H).T   + K * R * K.T
-	//   =      P_temp     * (I - H.T * K.T) + K * R * K.T
-	//   =      P_temp - P_temp * H.T * K.T  + K * R * K.T
-
-	// Step 1: conventional update
-	// Compute P_temp and store it in P to avoid allocating more memory
-	// P is symmetric, so PH == H.T * P.T == H.T * P. Taking the row is faster as matrices are row-major
-	VectorState PH = P * H; // H is stored as a column vector. H is in fact H.T
-
+	// 更高效的Joseph稳定形式
+	VectorState PH = P * H;
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j < State::size; j++) {
-			P(i, j) -= K(i) * PH(j); // P is now not symmetrical if K is not optimal (e.g.: some gains have been zeroed)
+			P(i, j) -= K(i) * PH(j);
 		}
 	}
 
-	// Step 2: stabilized update
-	PH = P * H; // H is stored as a column vector. H is in fact H.T
-
+	PH = P * H;
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j <= i; j++) {
 			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j);
 			P(j, i) = P(i, j);
 		}
 	}
-
 #endif
 
 	constrainStateVariances();
 
-	// apply the state corrections
 	fuse(K, innovation);
 	return true;
 }
 
 void Ekf::resetAidSourceStatusZeroInnovation(estimator_aid_source1d_s &status) const
 {
+	// 重置观测源的创新标记，设定为零创新（例如强制对齐）
+
 	status.time_last_fuse = _time_delayed_us;
 
 	status.innovation = 0.f;
@@ -1153,6 +1125,9 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 				const float &innovation, const float &innovation_variance,
 				float innovation_gate) const
 {
+	// 更新给定观测源的状态，包括创新、方差和检验比等
+	// 如果检验比超过阈值，认为创新被拒绝
+
 	bool innovation_rejected = false;
 
 	const float test_ratio = sq(innovation) / (sq(innovation_gate) * innovation_variance);
@@ -1163,13 +1138,10 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 
 		static constexpr float tau = 0.5f;
 		const float alpha = math::constrain(dt_s / (dt_s + tau), 0.f, 1.f);
-
-		// test_ratio_filtered
 		if (PX4_ISFINITE(status.test_ratio_filtered)) {
 			status.test_ratio_filtered += alpha * (matrix::sign(innovation) * test_ratio - status.test_ratio_filtered);
 
 		} else {
-			// otherwise, init the filtered test ratio
 			status.test_ratio_filtered = test_ratio;
 		}
 
@@ -1178,12 +1150,10 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 			status.innovation_filtered += alpha * (innovation - status.innovation_filtered);
 
 		} else {
-			// otherwise, init the filtered innovation
 			status.innovation_filtered = innovation;
 		}
 
-
-		// limit extremes in filtered values
+		// 防止数值过大
 		static constexpr float kNormalizedInnovationLimit = 2.f;
 		static constexpr float kTestRatioLimit = sq(kNormalizedInnovationLimit);
 
@@ -1196,7 +1166,7 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 		}
 
 	} else {
-		// invalid timestamp_sample, reset
+		// 如果timestamp无效或回跳，则直接重置过滤后的值
 		status.test_ratio_filtered = test_ratio;
 		status.innovation_filtered = innovation;
 	}
@@ -1219,15 +1189,15 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 
 	status.timestamp_sample = timestamp_sample;
 
-	// if any of the innovations are rejected, then the overall innovation is rejected
 	status.innovation_rejected = innovation_rejected;
 
-	// reset
 	status.fused = false;
 }
 
 void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
 {
+	// 根据标记，清除对于某些状态不可信时的卡尔曼增益，
+	// 比如当不允许学习陀螺仪偏置或加速度偏置时
 	for (unsigned i = 0; i < State::gyro_bias.dof; i++) {
 		if (_gyro_bias_inhibit[i]) {
 			K(State::gyro_bias.idx + i) = 0.f;
@@ -1241,7 +1211,6 @@ void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
 	}
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-
 	if (!_control_status.flags.mag) {
 		for (unsigned i = 0; i < State::mag_I.dof; i++) {
 			K(State::mag_I.idx + i) = 0.f;
@@ -1253,44 +1222,38 @@ void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
 			K(State::mag_B.idx + i) = 0.f;
 		}
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_WIND)
-
 	if (!_control_status.flags.wind) {
 		for (unsigned i = 0; i < State::wind_vel.dof; i++) {
 			K(State::wind_vel.idx + i) = 0.f;
 		}
 	}
-
 #endif // CONFIG_EKF2_WIND
 }
 
 float Ekf::getHeadingInnov() const
 {
-#if defined(CONFIG_EKF2_MAGNETOMETER)
+	// 获取当前有效航向观测的创新
+	// 如果多种航向观测同时存在，则返回其中的某一个或其组合
 
+#if defined(CONFIG_EKF2_MAGNETOMETER)
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
 		return Vector3f(_aid_src_mag.innovation).max();
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
-
 	if (_control_status.flags.gnss_yaw) {
 		return _aid_src_gnss_yaw.innovation;
 	}
-
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_yaw) {
 		return _aid_src_ev_yaw.innovation;
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	return 0.f;
@@ -1298,28 +1261,23 @@ float Ekf::getHeadingInnov() const
 
 float Ekf::getHeadingInnovVar() const
 {
+	// 获取当前有效航向观测的创新方差
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
 		return Vector3f(_aid_src_mag.innovation_variance).max();
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
-
 	if (_control_status.flags.gnss_yaw) {
 		return _aid_src_gnss_yaw.innovation_variance;
 	}
-
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_yaw) {
 		return _aid_src_ev_yaw.innovation_variance;
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	return 0.f;
@@ -1327,28 +1285,23 @@ float Ekf::getHeadingInnovVar() const
 
 float Ekf::getHeadingInnovRatio() const
 {
+	// 返回当前航向观测的创新检验比值
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
 		return Vector3f(_aid_src_mag.test_ratio).max();
 	}
-
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
-
 	if (_control_status.flags.gnss_yaw) {
 		return _aid_src_gnss_yaw.test_ratio;
 	}
-
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
-
 	if (_control_status.flags.ev_yaw) {
 		return _aid_src_ev_yaw.test_ratio;
 	}
-
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 	return 0.f;
