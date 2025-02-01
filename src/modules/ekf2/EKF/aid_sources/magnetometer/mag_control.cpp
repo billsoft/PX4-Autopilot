@@ -37,7 +37,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-
 /**
  * @file mag_control.cpp
  * @brief 控制EKF磁场融合的相关函数实现
@@ -46,22 +45,22 @@
 void Ekf::controlMagFusion(const imuSample &imu_sample)
 {
     // AID_SRC_NAME 用于记录当前融合的数据来源标签
-    static constexpr const char *AID_SRC_NAME = "mag";
-    estimator_aid_source3d_s &aid_src = _aid_src_mag;
+    static constexpr const char *AID_SRC_NAME = "mag"; // 磁传感器数据来源标识
+    estimator_aid_source3d_s &aid_src = _aid_src_mag; // 磁传感器的估计辅助源
 
     // 当无人机从地面第一次切换到飞行状态时，重置标志，下一次需要在飞行高度上对齐磁场
     if (!_control_status_prev.flags.in_air && _control_status.flags.in_air) {
-        _control_status.flags.mag_aligned_in_flight = false;
+        _control_status.flags.mag_aligned_in_flight = false; // 重置飞行中的磁场对齐标志
     }
 
     // 如果参数指定不进行任何磁传感器融合，直接停止并返回
     if (_params.mag_fusion_type == MagFuseType::NONE) {
-        stopMagFusion();
-        return;
+        stopMagFusion(); // 停止磁融合
+        return; // 退出函数
     }
 
     // 存储从磁力计缓冲区读取的样本
-    magSample mag_sample;
+    magSample mag_sample; // 磁力计样本数据结构
 
     // 尝试获取与imu_sample时间匹配或更早的第一份磁力计数据
     if (_mag_buffer && _mag_buffer->pop_first_older_than(imu_sample.time_us, &mag_sample)) {
@@ -69,7 +68,7 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
         // 如果磁力计数据标记了reset或这是第一帧数据
         if (mag_sample.reset || (_mag_counter == 0)) {
             // 传感器或校准发生了变化，重置相应状态
-            _control_status.flags.mag_fault = false;
+            _control_status.flags.mag_fault = false; // 清除磁故障标志
             _state.mag_B.zero();     // 重置磁偏置
             resetMagBiasCov();       // 重置磁偏置协方差
 
@@ -77,17 +76,17 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
             stopMagFusion();
 
             // 重置并更新磁力计低通滤波器
-            _mag_lpf.reset(mag_sample.mag);
-            _mag_counter = 1;
+            _mag_lpf.reset(mag_sample.mag); // 重置低通滤波器状态
+            _mag_counter = 1; // 初始化计数器
 
         } else {
             // 数据正常更新的情况，更新磁力计低通滤波器
-            _mag_lpf.update(mag_sample.mag);
-            _mag_counter++;
+            _mag_lpf.update(mag_sample.mag); // 更新低通滤波器
+            _mag_counter++; // 增加计数器
         }
 
         // 定期检查或当全局原点（GPS原点）更新时，是否需要更新WMM（世界磁模型）
-        bool wmm_updated = false;
+        bool wmm_updated = false; // WMM更新标志
         if (global_origin().isInitialized()) {
             // 判断全局原点的参考时间戳是否比上一次融合磁数据的时间更晚
             bool origin_newer_than_last_mag = (global_origin().getProjectionReferenceTimestamp() > aid_src.time_last_fuse);
@@ -96,15 +95,15 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
             if (global_origin_valid() && (origin_newer_than_last_mag || (isLocalHorizontalPositionValid() && isTimedOut(_wmm_mag_time_last_checked, 10e6)))) {
                 // 根据当前位置(纬度，经度)更新WMM
                 if (updateWorldMagneticModel(_gpos.latitude_deg(), _gpos.longitude_deg())) {
-                    wmm_updated = true;
+                    wmm_updated = true; // 标记WMM已更新
                 }
                 // 记录下此次更新检查的时间
-                _wmm_mag_time_last_checked = _time_delayed_us;
+                _wmm_mag_time_last_checked = _time_delayed_us; // 更新检查时间
 
             } else if (origin_newer_than_last_mag) {
                 // 否则只根据原点信息来更新
                 if (updateWorldMagneticModel(global_origin().getProjectionReferenceLat(), global_origin().getProjectionReferenceLon())) {
-                    wmm_updated = true;
+                    wmm_updated = true; // 标记WMM已更新
                 }
             }
         }
@@ -112,26 +111,26 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
         // 如果配置了合成磁传感器Z轴，并且WMM数据可用，则以理论值来覆盖Z测量
         if (_params.synthesize_mag_z && (_params.mag_declination_source & GeoDeclinationMask::USE_GEO_DECL)
             && (_wmm_earth_field_gauss.isAllFinite() && _wmm_earth_field_gauss.longerThan(0.f))) {
-            mag_sample.mag(2) = calculate_synthetic_mag_z_measurement(mag_sample.mag, _wmm_earth_field_gauss);
-            _control_status.flags.synthetic_mag_z = true;
+            mag_sample.mag(2) = calculate_synthetic_mag_z_measurement(mag_sample.mag, _wmm_earth_field_gauss); // 计算合成Z轴磁测量
+            _control_status.flags.synthetic_mag_z = true; // 设置合成Z轴标志
         } else {
-            _control_status.flags.synthetic_mag_z = false;
+            _control_status.flags.synthetic_mag_z = false; // 清除合成Z轴标志
         }
 
         // 每次都重置磁故障相关标志
-        _fault_status.flags.bad_mag_x = false;
-        _fault_status.flags.bad_mag_y = false;
-        _fault_status.flags.bad_mag_z = false;
+        _fault_status.flags.bad_mag_x = false; // 清除X轴故障标志
+        _fault_status.flags.bad_mag_y = false; // 清除Y轴故障标志
+        _fault_status.flags.bad_mag_z = false; // 清除Z轴故障标志
 
         // 为磁观测设置噪声方差，需要考虑传感器自身的噪声和采样率等因素
-        const float R_MAG = math::max(sq(_params.mag_noise), sq(0.01f));
+        const float R_MAG = math::max(sq(_params.mag_noise), sq(0.01f)); // 计算磁观测噪声方差
 
         // 定义存储创新量和创新方差的变量
-        Vector3f mag_innov;
-        Vector3f innov_var;
+        Vector3f mag_innov; // 存储磁创新量
+        Vector3f innov_var; // 存储创新方差
 
         // 观测雅可比矩阵和其他更新所需临时变量
-        VectorState H;
+        VectorState H; // 存储观测雅可比矩阵
         // 调用自动生成的函数，计算创新、创新方差以及观测雅可比
         sym::ComputeMagInnovInnovVarAndHx(_state.vector(), P, mag_sample.mag, R_MAG, FLT_EPSILON, &mag_innov, &innov_var, &H);
 
@@ -147,15 +146,15 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
         );
 
         // 分别检查各轴的创新超比检测
-        _innov_check_fail_status.flags.reject_mag_x = (aid_src.test_ratio[0] > 1.f);
-        _innov_check_fail_status.flags.reject_mag_y = (aid_src.test_ratio[1] > 1.f);
-        _innov_check_fail_status.flags.reject_mag_z = (aid_src.test_ratio[2] > 1.f);
+        _innov_check_fail_status.flags.reject_mag_x = (aid_src.test_ratio[0] > 1.f); // 检查X轴创新超比
+        _innov_check_fail_status.flags.reject_mag_y = (aid_src.test_ratio[1] > 1.f); // 检查Y轴创新超比
+        _innov_check_fail_status.flags.reject_mag_z = (aid_src.test_ratio[2] > 1.f); // 检查Z轴创新超比
 
         // 确定继续进行磁融合的条件：
         bool continuing_conditions_passing = (
-            (_params.mag_fusion_type == MagFuseType::INIT)
-            || (_params.mag_fusion_type == MagFuseType::AUTO)
-            || (_params.mag_fusion_type == MagFuseType::HEADING)
+            (_params.mag_fusion_type == MagFuseType::INIT) // 初始化模式
+            || (_params.mag_fusion_type == MagFuseType::AUTO) // 自动模式
+            || (_params.mag_fusion_type == MagFuseType::HEADING) // 航向模式
         )
         && _control_status.flags.tilt_align                             // 已经对准了俯仰和横滚
         && (
@@ -164,7 +163,7 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
             )
         )
         && mag_sample.mag.longerThan(0.f)                              // 磁测量的有效性
-        && mag_sample.mag.isAllFinite();
+        && mag_sample.mag.isAllFinite(); // 确保磁测量值是有限的
 
         // 判断是否满足启动磁融合的其他条件
         const bool starting_conditions_passing = continuing_conditions_passing
@@ -176,13 +175,13 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
                                                  && (
                                                     _state_reset_status.reset_count.quat == _state_reset_count_prev.quat // 本帧未发生四元数重置
                                                  )
-                                                 && isNewestSampleRecent(_time_last_mag_buffer_push, MAG_MAX_INTERVAL);
+                                                 && isNewestSampleRecent(_time_last_mag_buffer_push, MAG_MAX_INTERVAL); // 检查最新样本是否在最大间隔内
 
         // 检查磁航向的一致性，比如磁航向与当前姿态计算的航向差异
-        checkMagHeadingConsistency(mag_sample);
+        checkMagHeadingConsistency(mag_sample); // 检查磁航向一致性
 
         // 如果开启GPS或其他位置辅助，则说明有NE方向上的观测
-        const bool using_ne_aiding = _control_status.flags.gps || _control_status.flags.aux_gpos;
+        const bool using_ne_aiding = _control_status.flags.gps || _control_status.flags.aux_gpos; // 检查是否使用NE方向辅助
 
         // 在AUTO模式下，可能开启3D磁融合或者只有航向融合
         {
@@ -199,36 +198,36 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
                                                            !_control_status.flags.ev_yaw && !_control_status.flags.yaw_align
                                                        )
                                                    )
-                                                   && !_control_status.flags.mag_fault
-                                                   && !_control_status.flags.mag_field_disturbed
-                                                   && !_control_status.flags.ev_yaw
-                                                   && !_control_status.flags.gnss_yaw;
+                                                   && !_control_status.flags.mag_fault // 确保没有磁故障
+                                                   && !_control_status.flags.mag_field_disturbed // 确保磁场未受干扰
+                                                   && !_control_status.flags.ev_yaw // 确保未使用EV_Yaw
+                                                   && !_control_status.flags.gnss_yaw; // 确保未使用GNSS航向
 
             // 如果是AUTO模式并且在飞行中已经对齐过磁场，那么可以进行3D磁融合
             _control_status.flags.mag_3D = common_conditions_passing
-                                           && (_params.mag_fusion_type == MagFuseType::AUTO)
-                                           && _control_status.flags.mag_aligned_in_flight;
+                                           && (_params.mag_fusion_type == MagFuseType::AUTO) // 检查是否为自动模式
+                                           && _control_status.flags.mag_aligned_in_flight; // 检查是否在飞行中已对齐
 
             // 如果是HEADING或AUTO模式，但不满足3D融合条件，则仅融合航向
             _control_status.flags.mag_hdg = common_conditions_passing
                                             && (
-                                                (_params.mag_fusion_type == MagFuseType::HEADING)
+                                                (_params.mag_fusion_type == MagFuseType::HEADING) // 检查是否为航向模式
                                                 || (
-                                                    _params.mag_fusion_type == MagFuseType::AUTO && !_control_status.flags.mag_3D
+                                                    _params.mag_fusion_type == MagFuseType::AUTO && !_control_status.flags.mag_3D // 检查是否为自动模式且未进行3D融合
                                                 )
                                             );
         }
 
         // 状态转变的调试输出
         if (_control_status.flags.mag_3D && !_control_status_prev.flags.mag_3D) {
-            ECL_INFO("starting mag 3D fusion");
+            ECL_INFO("starting mag 3D fusion"); // 输出开始3D磁融合的日志
         } else if (!_control_status.flags.mag_3D && _control_status_prev.flags.mag_3D) {
-            ECL_INFO("stopping mag 3D fusion");
+            ECL_INFO("stopping mag 3D fusion"); // 输出停止3D磁融合的日志
         }
 
         // 如果没有NE方向辅助或机体当前静止，则还需要对磁偏角进行单独的融合
-        const bool no_ne_aiding_or_not_moving = !using_ne_aiding || _control_status.flags.vehicle_at_rest;
-        _control_status.flags.mag_dec = _control_status.flags.mag && no_ne_aiding_or_not_moving;
+        const bool no_ne_aiding_or_not_moving = !using_ne_aiding || _control_status.flags.vehicle_at_rest; // 检查是否没有NE辅助或车辆静止
+        _control_status.flags.mag_dec = _control_status.flags.mag && no_ne_aiding_or_not_moving; // 设置磁偏角融合标志
 
         // 如果已经开始磁融合
         if (_control_status.flags.mag) {
@@ -236,73 +235,73 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
             if (continuing_conditions_passing && _control_status.flags.yaw_align) {
                 // 如果需要在离地后重置Yaw，或WMM刚更新且没有NE辅助
                 if (checkHaglYawResetReq() || (wmm_updated && no_ne_aiding_or_not_moving)) {
-                    ECL_INFO("reset to %s", AID_SRC_NAME);
+                    ECL_INFO("reset to %s", AID_SRC_NAME); // 输出重置磁状态的日志
                     // 重置磁状态（包含地磁场和偏置），根据当前模式判断是否重置航向
                     resetMagStates(_mag_lpf.getState(), _control_status.flags.mag_hdg || _control_status.flags.mag_3D);
-                    aid_src.time_last_fuse = imu_sample.time_us;
+                    aid_src.time_last_fuse = imu_sample.time_us; // 更新最后融合时间
 
                 } else {
                     // 根据当前模式（3D或航向融合）来决定更新哪些状态
-                    const bool update_all_states = _control_status.flags.mag_3D || _control_status.flags.mag_hdg;
-                    const bool update_tilt = _control_status.flags.mag_3D;
+                    const bool update_all_states = _control_status.flags.mag_3D || _control_status.flags.mag_hdg; // 检查是否更新所有状态
+                    const bool update_tilt = _control_status.flags.mag_3D; // 检查是否更新倾斜状态
 
                     // 进行磁数据融合
-                    fuseMag(mag_sample.mag, R_MAG, H, aid_src, update_all_states, update_tilt);
+                    fuseMag(mag_sample.mag, R_MAG, H, aid_src, update_all_states, update_tilt); // 融合磁数据
 
                     // 如果包含更新姿态信息，则检查创新方差
                     if (update_all_states && update_tilt) {
-                        _fault_status.flags.bad_mag_x = (aid_src.innovation_variance[0] < aid_src.observation_variance[0]);
-                        _fault_status.flags.bad_mag_y = (aid_src.innovation_variance[1] < aid_src.observation_variance[1]);
-                        _fault_status.flags.bad_mag_z = (aid_src.innovation_variance[2] < aid_src.observation_variance[2]);
+                        _fault_status.flags.bad_mag_x = (aid_src.innovation_variance[0] < aid_src.observation_variance[0]); // 检查X轴创新方差
+                        _fault_status.flags.bad_mag_y = (aid_src.innovation_variance[1] < aid_src.observation_variance[1]); // 检查Y轴创新方差
+                        _fault_status.flags.bad_mag_z = (aid_src.innovation_variance[2] < aid_src.observation_variance[2]); // 检查Z轴创新方差
                     }
 
                     // 如果需要融合磁偏角
                     if (_control_status.flags.mag_dec) {
                         // 定义偏角噪声（弧度^2）
-                        const float R_DECL = sq(0.5f);
+                        const float R_DECL = sq(0.5f); // 设置偏角噪声方差
 
                         // 如果使用WMM提供的磁偏角
                         if ((_params.mag_declination_source & GeoDeclinationMask::USE_GEO_DECL)
                             && PX4_ISFINITE(_wmm_declination_rad)) {
 
-                            fuseDeclination(_wmm_declination_rad, 0.5f, update_all_states);
+                            fuseDeclination(_wmm_declination_rad, 0.5f, update_all_states); // 融合WMM提供的磁偏角
 
                         } else if ((_params.mag_declination_source & GeoDeclinationMask::SAVE_GEO_DECL)
                                    && PX4_ISFINITE(_params.mag_declination_deg)
                                    && (fabsf(_params.mag_declination_deg) > 0.f)
                                   ) {
                             // 使用保存的偏角
-                            fuseDeclination(math::radians(_params.mag_declination_deg), R_DECL, update_all_states);
+                            fuseDeclination(math::radians(_params.mag_declination_deg), R_DECL, update_all_states); // 融合保存的偏角
 
                         } else {
                             // 如果缺少任何来源，就融合0作为默认偏角
-                            float declination_rad = 0.f;
-                            fuseDeclination(declination_rad, R_DECL);
+                            float declination_rad = 0.f; // 默认偏角为0
+                            fuseDeclination(declination_rad, R_DECL); // 融合默认偏角
                         }
                     }
                 }
 
                 // 判断磁融合是否出现了较长时间未成功融合的情况
-                const bool is_fusion_failing = isTimedOut(aid_src.time_last_fuse, _params.reset_timeout_max);
+                const bool is_fusion_failing = isTimedOut(aid_src.time_last_fuse, _params.reset_timeout_max); // 检查融合超时
 
                 if (is_fusion_failing) {
                     // 如果没有NE辅助，那么在此处尝试重置磁状态
                     if (no_ne_aiding_or_not_moving) {
-                        ECL_WARN("%s fusion failing, resetting", AID_SRC_NAME);
-                        resetMagStates(_mag_lpf.getState(), _control_status.flags.mag_hdg || _control_status.flags.mag_3D);
-                        aid_src.time_last_fuse = imu_sample.time_us;
+                        ECL_WARN("%s fusion failing, resetting", AID_SRC_NAME); // 输出融合失败重置的日志
+                        resetMagStates(_mag_lpf.getState(), _control_status.flags.mag_hdg || _control_status.flags.mag_3D); // 重置磁状态
+                        aid_src.time_last_fuse = imu_sample.time_us; // 更新最后融合时间
 
                     } else {
                         // 否则，如果有NE辅助，但依旧出现故障，则停止融合
-                        ECL_WARN("stopping %s, fusion failing", AID_SRC_NAME);
-                        stopMagFusion();
+                        ECL_WARN("stopping %s, fusion failing", AID_SRC_NAME); // 输出停止融合的日志
+                        stopMagFusion(); // 停止磁融合
                     }
                 }
 
             } else {
                 // 如果继续融合条件失败，或者Yaw未对准，则停止但不记录故障
-                ECL_DEBUG("stopping %s fusion, continuing conditions no longer passing", AID_SRC_NAME);
-                stopMagFusion();
+                ECL_DEBUG("stopping %s fusion, continuing conditions no longer passing", AID_SRC_NAME); // 输出停止融合的日志
+                stopMagFusion(); // 停止磁融合
             }
 
         } else {
@@ -316,27 +315,27 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
                     || (getStateVariance<State::mag_I>().min() < kMagVarianceMin)
                     || (getStateVariance<State::mag_B>().min() < kMagVarianceMin)) {
 
-                    ECL_INFO("starting %s fusion, resetting states", AID_SRC_NAME);
+                    ECL_INFO("starting %s fusion, resetting states", AID_SRC_NAME); // 输出开始融合并重置状态的日志
 
                     // 当Yaw还未对准时，需要在重置时进行对准
-                    bool reset_heading = !_control_status.flags.yaw_align;
+                    bool reset_heading = !_control_status.flags.yaw_align; // 检查是否需要重置航向
 
-                    resetMagStates(_mag_lpf.getState(), reset_heading);
-                    aid_src.time_last_fuse = imu_sample.time_us;
+                    resetMagStates(_mag_lpf.getState(), reset_heading); // 重置磁状态
+                    aid_src.time_last_fuse = imu_sample.time_us; // 更新最后融合时间
 
                     // 如果进行了Yaw重置，则更新Yaw对准标志
                     if (reset_heading) {
-                        _control_status.flags.yaw_align = true;
-                        resetAidSourceStatusZeroInnovation(aid_src);
+                        _control_status.flags.yaw_align = true; // 设置Yaw对准标志
+                        resetAidSourceStatusZeroInnovation(aid_src); // 重置辅助源状态
                     }
 
-                    _control_status.flags.mag = true;
+                    _control_status.flags.mag = true; // 设置磁融合标志
 
                 } else {
                     // 否则直接尝试融合
                     if (fuseMag(mag_sample.mag, R_MAG, H, aid_src)) {
-                        ECL_INFO("starting %s fusion", AID_SRC_NAME);
-                        _control_status.flags.mag = true;
+                        ECL_INFO("starting %s fusion", AID_SRC_NAME); // 输出开始融合的日志
+                        _control_status.flags.mag = true; // 设置磁融合标志
                     }
                 }
             }
@@ -344,7 +343,7 @@ void Ekf::controlMagFusion(const imuSample &imu_sample)
 
     } else if (!isNewestSampleRecent(_time_last_mag_buffer_push, 2 * MAG_MAX_INTERVAL)) {
         // 如果长时间（2倍的最大间隔）没有新的磁传感器数据，则停止融合
-        stopMagFusion();
+        stopMagFusion(); // 停止磁融合
     }
 }
 
@@ -352,44 +351,44 @@ void Ekf::stopMagFusion()
 {
     // 如果当前处于磁融合状态
     if (_control_status.flags.mag) {
-        ECL_INFO("stopping mag fusion");
+        ECL_INFO("stopping mag fusion"); // 输出停止磁融合的日志
 
         // 重置磁场相关协方差
-        resetMagEarthCov();
-        resetMagBiasCov();
+        resetMagEarthCov(); // 重置地磁场协方差
+        resetMagBiasCov(); // 重置磁偏置协方差
 
         // 如果已经对准了Yaw且在进行3D或航向融合
         if (_control_status.flags.yaw_align && (_control_status.flags.mag_3D || _control_status.flags.mag_hdg)) {
             // 如果未使用NE方向的传感器数据辅助，则可能需要清除Yaw对准
-            const bool using_ne_aiding = _control_status.flags.gps || _control_status.flags.aux_gpos;
+            const bool using_ne_aiding = _control_status.flags.gps || _control_status.flags.aux_gpos; // 检查是否使用NE方向辅助
 
             if (!using_ne_aiding) {
-                _control_status.flags.yaw_align = false;
+                _control_status.flags.yaw_align = false; // 清除Yaw对准标志
             }
         }
 
         // 关闭磁融合标志
-        _control_status.flags.mag = false;
-        _control_status.flags.mag_dec = false;
+        _control_status.flags.mag = false; // 清除磁融合标志
+        _control_status.flags.mag_dec = false; // 清除磁偏角融合标志
 
         if (_control_status.flags.mag_3D) {
-            ECL_INFO("stopping mag 3D fusion");
-            _control_status.flags.mag_3D = false;
+            ECL_INFO("stopping mag 3D fusion"); // 输出停止3D磁融合的日志
+            _control_status.flags.mag_3D = false; // 清除3D磁融合标志
         }
 
         if (_control_status.flags.mag_hdg) {
-            ECL_INFO("stopping mag heading fusion");
-            _control_status.flags.mag_hdg = false;
-            _fault_status.flags.bad_hdg = false;
+            ECL_INFO("stopping mag heading fusion"); // 输出停止航向磁融合的日志
+            _control_status.flags.mag_hdg = false; // 清除航向磁融合标志
+            _fault_status.flags.bad_hdg = false; // 清除航向故障标志
         }
 
-        _control_status.flags.mag_aligned_in_flight = false;
+        _control_status.flags.mag_aligned_in_flight = false; // 清除飞行中磁场对齐标志
 
         // 清除磁相关故障标志
-        _fault_status.flags.bad_mag_x = false;
-        _fault_status.flags.bad_mag_y = false;
-        _fault_status.flags.bad_mag_z = false;
-        _fault_status.flags.bad_mag_decl = false;
+        _fault_status.flags.bad_mag_x = false; // 清除X轴故障标志
+        _fault_status.flags.bad_mag_y = false; // 清除Y轴故障标志
+        _fault_status.flags.bad_mag_z = false; // 清除Z轴故障标志
+        _fault_status.flags.bad_mag_decl = false; // 清除磁偏角故障标志
     }
 }
 
@@ -671,48 +670,60 @@ float Ekf::getMagDeclination()
     // 若无任何信息可用，则默认返回0
     return 0.f;
 }
-
+// 更新世界磁模型的函数
+// 参数：
+// - latitude_deg: 当前纬度（单位：度）
+// - longitude_deg: 当前经度（单位：度）
+// 返回值：
+// - 如果更新成功，返回true；否则返回false。
 bool Ekf::updateWorldMagneticModel(const double latitude_deg, const double longitude_deg)
 {
-    // 根据当前经纬度获取WMM提供的磁偏角、倾角和强度
+    // 根据当前经纬度获取WMM（世界磁模型）提供的磁偏角、倾角和强度
+    // 将获取的磁偏角从度转换为弧度
     const float declination_rad = math::radians(get_mag_declination_degrees(latitude_deg, longitude_deg));
+    // 将获取的倾角从度转换为弧度
     const float inclination_rad = math::radians(get_mag_inclination_degrees(latitude_deg, longitude_deg));
+    // 获取当前经纬度下的地磁场强度（单位：高斯）
     const float strength_gauss = get_mag_strength_gauss(latitude_deg, longitude_deg);
 
-    // 如果数据是有效的
+    // 检查获取的数据是否有效
     if (PX4_ISFINITE(declination_rad) && PX4_ISFINITE(inclination_rad) && PX4_ISFINITE(strength_gauss)) {
-        // 检查与当前存储值是否有较大差异
+        // 检查新获取的磁偏角与当前存储的磁偏角是否有显著差异
         const bool declination_changed = (fabsf(declination_rad - _wmm_declination_rad) > math::radians(1.f));
+        // 检查新获取的倾角与当前存储的倾角是否有显著差异
         const bool inclination_changed = (fabsf(inclination_rad - _wmm_inclination_rad) > math::radians(1.f));
+        // 检查新获取的地磁场强度与当前存储的强度是否有显著差异
         const bool strength_changed = (fabsf(strength_gauss - _wmm_field_strength_gauss) > 0.01f);
 
-        // 如果之前无效或发生显著变化
+        // 如果之前的值无效或发生显著变化
         if (!PX4_ISFINITE(_wmm_declination_rad)
             || !PX4_ISFINITE(_wmm_inclination_rad)
             || !PX4_ISFINITE(_wmm_field_strength_gauss)
-            || !_wmm_earth_field_gauss.longerThan(0.f)
-            || !_wmm_earth_field_gauss.isAllFinite()
-            || declination_changed
-            || inclination_changed
-            || strength_changed) {
+            || !_wmm_earth_field_gauss.longerThan(0.f) // 检查地球磁场向量是否有效
+            || !_wmm_earth_field_gauss.isAllFinite() // 检查地球磁场向量的所有分量是否有效
+            || declination_changed // 检查磁偏角是否发生变化
+            || inclination_changed // 检查倾角是否发生变化
+            || strength_changed) { // 检查地磁场强度是否发生变化
 
+            // 输出调试信息，显示更新前后的磁偏角
             ECL_DEBUG("WMM declination updated %.3f -> %.3f deg (lat=%.6f, lon=%.6f)",
-                      (double)math::degrees(_wmm_declination_rad),
-                      (double)math::degrees(declination_rad),
-                      (double)latitude_deg,
-                      (double)longitude_deg);
+                      (double)math::degrees(_wmm_declination_rad), // 更新前的磁偏角（度）
+                      (double)math::degrees(declination_rad), // 更新后的磁偏角（度）
+                      (double)latitude_deg, // 当前纬度
+                      (double)longitude_deg); // 当前经度
 
             // 更新全局存储的WMM信息
-            _wmm_declination_rad = declination_rad;
-            _wmm_inclination_rad = inclination_rad;
-            _wmm_field_strength_gauss = strength_gauss;
+            _wmm_declination_rad = declination_rad; // 更新磁偏角
+            _wmm_inclination_rad = inclination_rad; // 更新倾角
+            _wmm_field_strength_gauss = strength_gauss; // 更新地磁场强度
 
             // 通过倾角和偏角确定地球系下的磁场向量
+            // 使用Dcmf和Eulerf构造旋转矩阵，并计算地球磁场向量
             _wmm_earth_field_gauss = Dcmf(Eulerf(0, -inclination_rad, declination_rad)) * Vector3f(strength_gauss, 0, 0);
 
-            return true;
+            return true; // 返回更新成功
         }
     }
 
-    return false;
+    return false; // 返回更新失败
 }
