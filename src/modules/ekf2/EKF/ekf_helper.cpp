@@ -403,143 +403,185 @@ void Ekf::get_ekf_ctrl_limits(float *vxy_max, float *vz_max, float *hagl_min, fl
 void Ekf::resetGyroBias()
 {
 	// 将陀螺仪偏置置零
-	_state.gyro_bias.zero();
+	// 该函数用于重置陀螺仪的偏置值，确保陀螺仪在后续的测量中不受之前偏置的影响
+	_state.gyro_bias.zero(); // 调用状态对象的零函数将陀螺仪偏置清零
 
-	resetGyroBiasCov();
+	resetGyroBiasCov(); // 重置陀螺仪偏置的协方差
 }
 
 void Ekf::resetAccelBias()
 {
 	// 将加速度计偏置置零
-	_state.accel_bias.zero();
+	// 该函数用于重置加速度计的偏置值，确保加速度计在后续的测量中不受之前偏置的影响
+	_state.accel_bias.zero(); // 调用状态对象的零函数将加速度计偏置清零
 
-	resetAccelBiasCov();
+	resetAccelBiasCov(); // 重置加速度计偏置的协方差
 }
 
 float Ekf::getHeadingInnovationTestRatio() const
 {
 	// 获取航向角创新向量的最大检验比值(innovation test ratio)
 	// 如果没有可用的航向数据来源，则返回NaN
-	float test_ratio = -1.f;
+	float test_ratio = -1.f; // 初始化检验比值为-1，表示尚未计算有效值
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
+	// 如果使用了磁力计进行航向测量
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
+		// 遍历磁力计的检验比值数组
 		for (auto &test_ratio_filtered : _aid_src_mag.test_ratio_filtered) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
+	// 如果使用了GNSS航向测量
 	if (_control_status.flags.gnss_yaw) {
+		// 更新检验比值为当前最大值
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_yaw.test_ratio_filtered));
 	}
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
+	// 如果使用了外部视觉进行航向测量
 	if (_control_status.flags.ev_yaw) {
+		// 更新检验比值为当前最大值
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_yaw.test_ratio_filtered));
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
+	// 检查检验比值是否有效且大于等于0
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		// 返回检验比值的平方根
 		return sqrtf(test_ratio);
 	}
 
+	// 如果没有有效的检验比值，返回NaN
 	return NAN;
 }
 
 float Ekf::getHorizontalVelocityInnovationTestRatio() const
 {
 	// 返回与水平速度相关的创新检验比值的最大值
-	float test_ratio = -1.f;
+	float test_ratio = -1.f; // 初始化检验比值为-1，表示尚未计算有效值
 
 #if defined(CONFIG_EKF2_GNSS)
+	// 如果使用了GNSS进行水平速度测量
 	if (_control_status.flags.gps) {
+		// 遍历GNSS速度的检验比值数组
 		for (int i = 0; i < 2; i++) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[i]));
 		}
 	}
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
+	// 如果使用了外部视觉进行水平速度测量
 	if (_control_status.flags.ev_vel) {
+		// 遍历外部视觉速度的检验比值数组
 		for (int i = 0; i < 2; i++) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[i]));
 		}
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
+	// 如果光流是唯一的水平辅助源
 	if (isOnlyActiveSourceOfHorizontalAiding(_control_status.flags.opt_flow)) {
+		// 遍历光流的检验比值数组
 		for (auto &test_ratio_filtered : _aid_src_optical_flow.test_ratio_filtered) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
+	// 检查检验比值是否有效且大于等于0
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		// 返回检验比值的平方根
 		return sqrtf(test_ratio);
 	}
 
+	// 如果没有有效的检验比值，返回NaN
 	return NAN;
 }
 
 float Ekf::getVerticalVelocityInnovationTestRatio() const
 {
 	// 返回与垂直速度相关的创新检验比值的最大值
-	float test_ratio = -1.f;
+	float test_ratio = -1.f; // 初始化检验比值为-1，表示尚未计算有效值
 
 #if defined(CONFIG_EKF2_GNSS)
+	// 如果使用了GNSS进行垂直速度测量
 	if (_control_status.flags.gps) {
+		// 更新检验比值为当前最大值
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_gnss_vel.test_ratio_filtered[2]));
 	}
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
+	// 如果使用了外部视觉进行垂直速度测量
 	if (_control_status.flags.ev_vel) {
+		// 更新检验比值为当前最大值
 		test_ratio = math::max(test_ratio, fabsf(_aid_src_ev_vel.test_ratio_filtered[2]));
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
+	// 检查检验比值是否有效且大于等于0
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		// 返回检验比值的平方根
 		return sqrtf(test_ratio);
 	}
 
+	// 如果没有有效的检验比值，返回NaN
 	return NAN;
 }
 
 float Ekf::getHorizontalPositionInnovationTestRatio() const
 {
 	// 返回与水平位置相关的创新检验比值的最大值
-	float test_ratio = -1.f;
+	float test_ratio = -1.f; // 初始化检验比值为-1，表示尚未计算有效值
 
 #if defined(CONFIG_EKF2_GNSS)
+	// 如果使用了GNSS进行水平位置测量
 	if (_control_status.flags.gps) {
+		// 遍历GNSS位置的检验比值数组
 		for (auto &test_ratio_filtered : _aid_src_gnss_pos.test_ratio_filtered) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
+	// 如果使用了外部视觉进行水平位置测量
 	if (_control_status.flags.ev_pos) {
+		// 遍历外部视觉位置的检验比值数组
 		for (auto &test_ratio_filtered : _aid_src_ev_pos.test_ratio_filtered) {
+			// 更新检验比值为当前最大值
 			test_ratio = math::max(test_ratio, fabsf(test_ratio_filtered));
 		}
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_AUX_GLOBAL_POSITION) && defined(MODULE_NAME)
+	// 如果使用了辅助全局位置
 	if (_control_status.flags.aux_gpos) {
+		// 更新检验比值为当前最大值
 		test_ratio = math::max(test_ratio, fabsf(_aux_global_position.test_ratio_filtered()));
 	}
 #endif // CONFIG_EKF2_AUX_GLOBAL_POSITION
 
+	// 检查检验比值是否有效且大于等于0
 	if (PX4_ISFINITE(test_ratio) && (test_ratio >= 0.f)) {
+		// 返回检验比值的平方根
 		return sqrtf(test_ratio);
 	}
 
+	// 如果没有有效的检验比值，返回NaN
 	return NAN;
 }
 
@@ -547,41 +589,48 @@ float Ekf::getVerticalPositionInnovationTestRatio() const
 {
 	// 返回垂直方向位置相关的平均创新检验比值
 	// 当多个高度来源（气压、高度、光学、视觉等）时，对它们的创新进行综合考虑
-	float hgt_sum = 0.f;
-	int n_hgt_sources = 0;
+	float hgt_sum = 0.f; // 初始化高度检验比值总和为0
+	int n_hgt_sources = 0; // 初始化有效高度来源计数为0
 
 #if defined(CONFIG_EKF2_BAROMETER)
+	// 如果使用了气压计进行高度测量
 	if (_control_status.flags.baro_hgt) {
-		hgt_sum += sqrtf(fabsf(_aid_src_baro_hgt.test_ratio_filtered));
-		n_hgt_sources++;
+		hgt_sum += sqrtf(fabsf(_aid_src_baro_hgt.test_ratio_filtered)); // 累加气压计的检验比值
+		n_hgt_sources++; // 有效高度来源计数加1
 	}
 #endif // CONFIG_EKF2_BAROMETER
 
 #if defined(CONFIG_EKF2_GNSS)
+	// 如果使用了GNSS进行高度测量
 	if (_control_status.flags.gps_hgt) {
-		hgt_sum += sqrtf(fabsf(_aid_src_gnss_hgt.test_ratio_filtered));
-		n_hgt_sources++;
+		hgt_sum += sqrtf(fabsf(_aid_src_gnss_hgt.test_ratio_filtered)); // 累加GNSS的检验比值
+		n_hgt_sources++; // 有效高度来源计数加1
 	}
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_RANGE_FINDER)
+	// 如果使用了测距仪进行高度测量
 	if (_control_status.flags.rng_hgt) {
-		hgt_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered));
-		n_hgt_sources++;
+		hgt_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered)); // 累加测距仪的检验比值
+		n_hgt_sources++; // 有效高度来源计数加1
 	}
 #endif // CONFIG_EKF2_RANGE_FINDER
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
+	// 如果使用了外部视觉进行高度测量
 	if (_control_status.flags.ev_hgt) {
-		hgt_sum += sqrtf(fabsf(_aid_src_ev_hgt.test_ratio_filtered));
-		n_hgt_sources++;
+		hgt_sum += sqrtf(fabsf(_aid_src_ev_hgt.test_ratio_filtered)); // 累加外部视觉的检验比值
+		n_hgt_sources++; // 有效高度来源计数加1
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
+	// 如果有有效的高度来源
 	if (n_hgt_sources > 0) {
+		// 返回平均检验比值，确保不小于FLT_MIN
 		return math::max(hgt_sum / static_cast<float>(n_hgt_sources), FLT_MIN);
 	}
 
+	// 如果没有有效的高度来源，返回NaN
 	return NAN;
 }
 
@@ -589,11 +638,14 @@ float Ekf::getAirspeedInnovationTestRatio() const
 {
 	// 返回空速融合相关的创新检验比值，如果未融合空速，则返回NAN
 #if defined(CONFIG_EKF2_AIRSPEED)
+	// 如果空速融合被激活
 	if (_control_status.flags.fuse_aspd) {
+		// 返回空速的检验比值的平方根
 		return sqrtf(fabsf(_aid_src_airspeed.test_ratio_filtered));
 	}
 #endif // CONFIG_EKF2_AIRSPEED
 
+	// 如果未融合空速，返回NaN
 	return NAN;
 }
 
@@ -601,43 +653,52 @@ float Ekf::getSyntheticSideslipInnovationTestRatio() const
 {
 	// 返回合成侧滑角融合相关的创新检验比值
 #if defined(CONFIG_EKF2_SIDESLIP)
+	// 如果侧滑角融合被激活
 	if (_control_status.flags.fuse_beta) {
+		// 返回侧滑角的检验比值的平方根
 		return sqrtf(fabsf(_aid_src_sideslip.test_ratio_filtered));
 	}
 #endif // CONFIG_EKF2_SIDESLIP
 
+	// 如果未融合侧滑角，返回NaN
 	return NAN;
 }
 
 float Ekf::getHeightAboveGroundInnovationTestRatio() const
 {
 	// 返回地面高度（HAGL）相关的创新检验比值
-	float hagl_sum = 0.f;
-	int n_hagl_sources = 0;
+	float hagl_sum = 0.f; // 初始化地面高度检验比值总和为0
+	int n_hagl_sources = 0; // 初始化有效地面高度来源计数为0
 
 #if defined(CONFIG_EKF2_TERRAIN)
 
 # if defined(CONFIG_EKF2_OPTICAL_FLOW)
+	// 如果使用了光流进行地面高度测量
 	if (_control_status.flags.opt_flow_terrain) {
+		// 累加光流的检验比值
 		hagl_sum += sqrtf(math::max(fabsf(_aid_src_optical_flow.test_ratio_filtered[0]),
 			    _aid_src_optical_flow.test_ratio_filtered[1]));
-		n_hagl_sources++;
+		n_hagl_sources++; // 有效地面高度来源计数加1
 	}
 # endif // CONFIG_EKF2_OPTICAL_FLOW
 
 # if defined(CONFIG_EKF2_RANGE_FINDER)
+	// 如果使用了测距仪进行地面高度测量
 	if (_control_status.flags.rng_terrain) {
-		hagl_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered));
-		n_hagl_sources++;
+		hagl_sum += sqrtf(fabsf(_aid_src_rng_hgt.test_ratio_filtered)); // 累加测距仪的检验比值
+		n_hagl_sources++; // 有效地面高度来源计数加1
 	}
 # endif // CONFIG_EKF2_RANGE_FINDER
 
 #endif // CONFIG_EKF2_TERRAIN
 
+	// 如果有有效的地面高度来源
 	if (n_hagl_sources > 0) {
+		// 返回平均检验比值，确保不小于FLT_MIN
 		return math::max(hagl_sum / static_cast<float>(n_hagl_sources), FLT_MIN);
 	}
 
+	// 如果没有有效的地面高度来源，返回NaN
 	return NAN;
 }
 
@@ -647,21 +708,21 @@ uint16_t Ekf::get_ekf_soln_status() const
 	// 与Mavlink中的ESTIMATOR_STATUS_FLAGS对应
 	union ekf_solution_status_u {
 		struct {
-			uint16_t attitude           : 1;
-			uint16_t velocity_horiz     : 1;
-			uint16_t velocity_vert      : 1;
-			uint16_t pos_horiz_rel      : 1;
-			uint16_t pos_horiz_abs      : 1;
-			uint16_t pos_vert_abs       : 1;
-			uint16_t pos_vert_agl       : 1;
-			uint16_t const_pos_mode     : 1;
-			uint16_t pred_pos_horiz_rel : 1;
-			uint16_t pred_pos_horiz_abs : 1;
-			uint16_t gps_glitch         : 1;
-			uint16_t accel_error        : 1;
-		} flags;
-		uint16_t value;
-	} soln_status{};
+			uint16_t attitude           : 1; // 姿态是否可靠
+			uint16_t velocity_horiz     : 1; // 水平速度是否可靠
+			uint16_t velocity_vert      : 1; // 垂直速度是否可靠
+			uint16_t pos_horiz_rel      : 1; // 相对水平位置是否可靠
+			uint16_t pos_horiz_abs      : 1; // 绝对水平位置是否可靠
+			uint16_t pos_vert_abs       : 1; // 绝对垂直位置是否可靠
+			uint16_t pos_vert_agl       : 1; // 距地高度是否可靠
+			uint16_t const_pos_mode     : 1; // 是否维持静止模式
+			uint16_t pred_pos_horiz_rel : 1; // 相对水平位置预测是否可靠
+			uint16_t pred_pos_horiz_abs : 1; // 绝对水平位置预测是否可靠
+			uint16_t gps_glitch         : 1; // 是否检测到GPS故障
+			uint16_t accel_error        : 1; // 是否检测到加速度计故障
+		} flags; // 状态标志结构体
+		uint16_t value; // 状态标志的值
+	} soln_status{}; // 初始化状态标志
 
 	// attitude：是否获得可靠的姿态估计
 	soln_status.flags.attitude = attitude_valid();
@@ -1057,67 +1118,70 @@ void Ekf::fuseDirectStateMeasurement(const float innov, const float innov_var, c
 		}
 	}
 #endif
-
+	// 限制状态方差，确保方差在合理范围内
 	constrainStateVariances();
 
-	// 应用状态修正
+	// 应用状态修正，将卡尔曼增益 K 和创新值 innov 结合，更新状态
 	fuse(K, innov);
 }
 
 bool Ekf::measurementUpdate(VectorState &K, const VectorState &H, const float R, const float innovation)
 {
-	// 这一函数用于一般性的一维观测卡尔曼更新，K为增益向量，H为观测模型向量，R为噪声，innovation为观测残差
+	// 这一函数用于一般性的一维观测卡尔曼更新
+	// K为增益向量，H为观测模型向量，R为测量噪声，innovation为观测残差
 
+	// 清除被抑制的状态卡尔曼增益
 	clearInhibitedStateKalmanGains(K);
 
 #if false
 	// Joseph稳定形式，计算代价很大，仅用于调试
-	auto A = matrix::eye<float, State::size>();
-	A -= K.multiplyByTranspose(H);
-	P = A * P;
-	P = P.multiplyByTranspose(A);
-
-	const VectorState KR = K * R;
-	P += KR.multiplyByTranspose(K);
+	auto A = matrix::eye<float, State::size>(); // 创建单位矩阵
+	A -= K.multiplyByTranspose(H); // 更新矩阵 A
+	P = A * P; // 更新协方差矩阵 P
+	P = P.multiplyByTranspose(A); // 进行转置乘法更新
+	const VectorState KR = K * R; // 计算增益与噪声的乘积
+	P += KR.multiplyByTranspose(K); // 更新协方差矩阵 P
 #else
 	// 更高效的Joseph稳定形式
-	VectorState PH = P * H;
+	VectorState PH = P * H; // 计算 P 和 H 的乘积
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j < State::size; j++) {
-			P(i, j) -= K(i) * PH(j);
+			P(i, j) -= K(i) * PH(j); // 更新协方差矩阵 P
 		}
 	}
 
-	PH = P * H;
+	PH = P * H; // 再次计算 P 和 H 的乘积
 	for (unsigned i = 0; i < State::size; i++) {
 		for (unsigned j = 0; j <= i; j++) {
-			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j);
-			P(j, i) = P(i, j);
+			P(i, j) = P(i, j) - PH(i) * K(j) + K(i) * R * K(j); // 更新协方差矩阵 P
+			P(j, i) = P(i, j); // 确保协方差矩阵是对称的
 		}
 	}
 #endif
 
+	// 限制状态方差，确保方差在合理范围内
 	constrainStateVariances();
 
+	// 应用状态修正，将卡尔曼增益 K 和创新值结合，更新状态
 	fuse(K, innovation);
-	return true;
+	return true; // 返回更新成功
 }
 
 void Ekf::resetAidSourceStatusZeroInnovation(estimator_aid_source1d_s &status) const
 {
 	// 重置观测源的创新标记，设定为零创新（例如强制对齐）
 
-	status.time_last_fuse = _time_delayed_us;
+	status.time_last_fuse = _time_delayed_us; // 记录最后一次融合的时间
 
-	status.innovation = 0.f;
-	status.innovation_filtered = 0.f;
-	status.innovation_variance = status.observation_variance;
+	status.innovation = 0.f; // 设置创新为零
+	status.innovation_filtered = 0.f; // 设置过滤后的创新为零
+	status.innovation_variance = status.observation_variance; // 设置创新方差为观测方差
 
-	status.test_ratio = 0.f;
-	status.test_ratio_filtered = 0.f;
+	status.test_ratio = 0.f; // 设置检验比为零
+	status.test_ratio_filtered = 0.f; // 设置过滤后的检验比为零
 
-	status.innovation_rejected = false;
-	status.fused = true;
+	status.innovation_rejected = false; // 设置创新未被拒绝
+	status.fused = true; // 设置为已融合状态
 }
 
 void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t &timestamp_sample,
@@ -1128,70 +1192,71 @@ void Ekf::updateAidSourceStatus(estimator_aid_source1d_s &status, const uint64_t
 	// 更新给定观测源的状态，包括创新、方差和检验比等
 	// 如果检验比超过阈值，认为创新被拒绝
 
-	bool innovation_rejected = false;
+	bool innovation_rejected = false; // 初始化创新拒绝标记为假
 
-	const float test_ratio = sq(innovation) / (sq(innovation_gate) * innovation_variance);
+	const float test_ratio = sq(innovation) / (sq(innovation_gate) * innovation_variance); // 计算检验比
 
 	if ((status.timestamp_sample > 0) && (timestamp_sample > status.timestamp_sample)) {
+		// 如果时间戳有效且新时间戳大于上一个时间戳
+		const float dt_s = math::constrain((timestamp_sample - status.timestamp_sample) * 1e-6f, 0.001f, 1.f); // 计算时间间隔
 
-		const float dt_s = math::constrain((timestamp_sample - status.timestamp_sample) * 1e-6f, 0.001f, 1.f);
-
-		static constexpr float tau = 0.5f;
-		const float alpha = math::constrain(dt_s / (dt_s + tau), 0.f, 1.f);
+		static constexpr float tau = 0.5f; // 设置时间常数
+		const float alpha = math::constrain(dt_s / (dt_s + tau), 0.f, 1.f); // 计算平滑因子
 		if (PX4_ISFINITE(status.test_ratio_filtered)) {
-			status.test_ratio_filtered += alpha * (matrix::sign(innovation) * test_ratio - status.test_ratio_filtered);
+			// 如果过滤后的检验比是有限的
+			status.test_ratio_filtered += alpha * (matrix::sign(innovation) * test_ratio - status.test_ratio_filtered); // 更新过滤后的检验比
 
 		} else {
-			status.test_ratio_filtered = test_ratio;
+			status.test_ratio_filtered = test_ratio; // 否则直接设置为当前检验比
 		}
 
-		// innovation_filtered
+		// 更新过滤后的创新
 		if (PX4_ISFINITE(status.innovation_filtered)) {
-			status.innovation_filtered += alpha * (innovation - status.innovation_filtered);
+			status.innovation_filtered += alpha * (innovation - status.innovation_filtered); // 更新过滤后的创新
 
 		} else {
-			status.innovation_filtered = innovation;
+			status.innovation_filtered = innovation; // 否则直接设置为当前创新
 		}
 
 		// 防止数值过大
-		static constexpr float kNormalizedInnovationLimit = 2.f;
-		static constexpr float kTestRatioLimit = sq(kNormalizedInnovationLimit);
+		static constexpr float kNormalizedInnovationLimit = 2.f; // 设置创新限制
+		static constexpr float kTestRatioLimit = sq(kNormalizedInnovationLimit); // 设置检验比限制
 
 		if (test_ratio > kTestRatioLimit) {
+			// 如果检验比超过限制
+			status.test_ratio_filtered = math::constrain(status.test_ratio_filtered, -kTestRatioLimit, kTestRatioLimit); // 限制过滤后的检验比
 
-			status.test_ratio_filtered = math::constrain(status.test_ratio_filtered, -kTestRatioLimit, kTestRatioLimit);
-
-			const float innov_limit = kNormalizedInnovationLimit * innovation_gate * sqrtf(innovation_variance);
-			status.innovation_filtered = math::constrain(status.innovation_filtered, -innov_limit, innov_limit);
+			const float innov_limit = kNormalizedInnovationLimit * innovation_gate * sqrtf(innovation_variance); // 计算创新限制
+			status.innovation_filtered = math::constrain(status.innovation_filtered, -innov_limit, innov_limit); // 限制过滤后的创新
 		}
 
 	} else {
-		// 如果timestamp无效或回跳，则直接重置过滤后的值
-		status.test_ratio_filtered = test_ratio;
-		status.innovation_filtered = innovation;
+		// 如果时间戳无效或回跳，则直接重置过滤后的值
+		status.test_ratio_filtered = test_ratio; // 设置过滤后的检验比为当前检验比
+		status.innovation_filtered = innovation; // 设置过滤后的创新为当前创新
 	}
 
-	status.test_ratio = test_ratio;
+	status.test_ratio = test_ratio; // 更新检验比
 
-	status.observation = observation;
-	status.observation_variance = observation_variance;
+	status.observation = observation; // 更新观测值
+	status.observation_variance = observation_variance; // 更新观测方差
 
-	status.innovation = innovation;
-	status.innovation_variance = innovation_variance;
+	status.innovation = innovation; // 更新创新
+	status.innovation_variance = innovation_variance; // 更新创新方差
 
-	if ((test_ratio > 1.f)
-	    || !PX4_ISFINITE(test_ratio)
-	    || !PX4_ISFINITE(status.innovation)
-	    || !PX4_ISFINITE(status.innovation_variance)
+	if ((test_ratio > 1.f) // 如果检验比大于1
+	    || !PX4_ISFINITE(test_ratio) // 或者检验比不是有限值
+	    || !PX4_ISFINITE(status.innovation) // 或者创新不是有限值
+	    || !PX4_ISFINITE(status.innovation_variance) // 或者创新方差不是有限值
 	   ) {
-		innovation_rejected = true;
+		innovation_rejected = true; // 标记创新被拒绝
 	}
 
-	status.timestamp_sample = timestamp_sample;
+	status.timestamp_sample = timestamp_sample; // 更新时间戳
 
-	status.innovation_rejected = innovation_rejected;
+	status.innovation_rejected = innovation_rejected; // 更新创新拒绝状态
 
-	status.fused = false;
+	status.fused = false; // 设置为未融合状态
 }
 
 void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
@@ -1200,26 +1265,26 @@ void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
 	// 比如当不允许学习陀螺仪偏置或加速度偏置时
 	for (unsigned i = 0; i < State::gyro_bias.dof; i++) {
 		if (_gyro_bias_inhibit[i]) {
-			K(State::gyro_bias.idx + i) = 0.f;
+			K(State::gyro_bias.idx + i) = 0.f; // 如果陀螺仪偏置被抑制，设置对应增益为零
 		}
 	}
 
 	for (unsigned i = 0; i < State::accel_bias.dof; i++) {
 		if (_accel_bias_inhibit[i]) {
-			K(State::accel_bias.idx + i) = 0.f;
+			K(State::accel_bias.idx + i) = 0.f; // 如果加速度偏置被抑制，设置对应增益为零
 		}
 	}
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 	if (!_control_status.flags.mag) {
 		for (unsigned i = 0; i < State::mag_I.dof; i++) {
-			K(State::mag_I.idx + i) = 0.f;
+			K(State::mag_I.idx + i) = 0.f; // 如果磁力计未启用，设置对应增益为零
 		}
 	}
 
 	if (!_control_status.flags.mag) {
 		for (unsigned i = 0; i < State::mag_B.dof; i++) {
-			K(State::mag_B.idx + i) = 0.f;
+			K(State::mag_B.idx + i) = 0.f; // 如果磁力计未启用，设置对应增益为零
 		}
 	}
 #endif // CONFIG_EKF2_MAGNETOMETER
@@ -1227,7 +1292,7 @@ void Ekf::clearInhibitedStateKalmanGains(VectorState &K) const
 #if defined(CONFIG_EKF2_WIND)
 	if (!_control_status.flags.wind) {
 		for (unsigned i = 0; i < State::wind_vel.dof; i++) {
-			K(State::wind_vel.idx + i) = 0.f;
+			K(State::wind_vel.idx + i) = 0.f; // 如果风速未启用，设置对应增益为零
 		}
 	}
 #endif // CONFIG_EKF2_WIND
@@ -1240,23 +1305,23 @@ float Ekf::getHeadingInnov() const
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
-		return Vector3f(_aid_src_mag.innovation).max();
+		return Vector3f(_aid_src_mag.innovation).max(); // 返回磁力计的最大创新
 	}
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
 	if (_control_status.flags.gnss_yaw) {
-		return _aid_src_gnss_yaw.innovation;
+		return _aid_src_gnss_yaw.innovation; // 返回GNSS航向的创新
 	}
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	if (_control_status.flags.ev_yaw) {
-		return _aid_src_ev_yaw.innovation;
+		return _aid_src_ev_yaw.innovation; // 返回外部视觉的航向创新
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
-	return 0.f;
+	return 0.f; // 如果没有有效观测，返回0
 }
 
 float Ekf::getHeadingInnovVar() const
@@ -1264,23 +1329,23 @@ float Ekf::getHeadingInnovVar() const
 	// 获取当前有效航向观测的创新方差
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
-		return Vector3f(_aid_src_mag.innovation_variance).max();
+		return Vector3f(_aid_src_mag.innovation_variance).max(); // 返回磁力计的最大创新方差
 	}
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
 	if (_control_status.flags.gnss_yaw) {
-		return _aid_src_gnss_yaw.innovation_variance;
+		return _aid_src_gnss_yaw.innovation_variance; // 返回GNSS航向的创新方差
 	}
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	if (_control_status.flags.ev_yaw) {
-		return _aid_src_ev_yaw.innovation_variance;
+		return _aid_src_ev_yaw.innovation_variance; // 返回外部视觉的航向创新方差
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
-	return 0.f;
+	return 0.f; // 如果没有有效观测，返回0
 }
 
 float Ekf::getHeadingInnovRatio() const
@@ -1288,21 +1353,21 @@ float Ekf::getHeadingInnovRatio() const
 	// 返回当前航向观测的创新检验比值
 #if defined(CONFIG_EKF2_MAGNETOMETER)
 	if (_control_status.flags.mag_hdg || _control_status.flags.mag_3D) {
-		return Vector3f(_aid_src_mag.test_ratio).max();
+		return Vector3f(_aid_src_mag.test_ratio).max(); // 返回磁力计的最大检验比
 	}
 #endif // CONFIG_EKF2_MAGNETOMETER
 
 #if defined(CONFIG_EKF2_GNSS_YAW)
 	if (_control_status.flags.gnss_yaw) {
-		return _aid_src_gnss_yaw.test_ratio;
+		return _aid_src_gnss_yaw.test_ratio; // 返回GNSS航向的检验比
 	}
 #endif // CONFIG_EKF2_GNSS_YAW
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	if (_control_status.flags.ev_yaw) {
-		return _aid_src_ev_yaw.test_ratio;
+		return _aid_src_ev_yaw.test_ratio; // 返回外部视觉的航向检验比
 	}
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
-	return 0.f;
+	return 0.f; // 如果没有有效观测，返回0
 }
