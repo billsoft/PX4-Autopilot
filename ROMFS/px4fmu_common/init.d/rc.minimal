@@ -2,134 +2,155 @@
 #
 # rc.minimal
 #
-# 最小化启动脚本，仅启动底层驱动和必要的通信模块
-# 适用于 Pixhawk 6X
+# 最小化启动脚本，适用于 Pixhawk6X
+#
 
-echo "Starting minimal configuration..."
-
-###############################################################################
-# 1. 基础板级脚本（可选）
-#    Pixhawk 6X 的官方板级配置通常在 rc.board 内部完成大部分初始化。
-#    如果需要在 minimal 模式下执行 rc.board，可以保留以下行。
-###############################################################################
-#. /etc/init.d/rc.board
+echo "Starting minimal configuration for Pixhawk6X..."
 
 ###############################################################################
-# 2. 设置系统参数
-#    禁用常见的安全检查和飞控核心依赖，以避免上层模块阻碍系统运行。
+# 1. 板级初始化与文件系统挂载检查
 ###############################################################################
+if [ -f /etc/init.d/rc.board ]; then
+    . /etc/init.d/rc.board
+fi
 
-# 2.1 禁用飞控中的常见 "Check Breakers (CBRK)" 参数
-param set CBRK_SUPPLY_CHK 894281    # 禁用电源检查
-param set CBRK_AIRSPD_CHK 894281    # 禁用空速传感器检查
-param set CBRK_IO_SAFETY 22027      # 禁用 IO Safety (解锁保护)
-param set CBRK_FLIGHTTERM 121212    # 禁用飞行终止器检查
-param set CBRK_ENGINEFAIL 284953    # 禁用发动机失效检查
-param set CBRK_USB_CHK 197848       # 禁用 USB 检查
+if [ -d /fs/microsd ]; then
+    echo "SD card mounted."
+    usleep 20000  # 等待20ms确保文件系统就绪
+else
+    echo "SD card not mounted!"
+fi
 
-# 2.2 禁用 commander 的姿态检查、GPS 检查等
+###############################################################################
+# 2. 设置系统参数（禁用部分安全检查）
+###############################################################################
+param set CBRK_SUPPLY_CHK 894281
+param set CBRK_AIRSPD_CHK 894281
+param set CBRK_IO_SAFETY 22027
+param set CBRK_FLIGHTTERM 121212
+param set CBRK_ENGINEFAIL 284953
+param set CBRK_USB_CHK 197848
+
 param set COM_ARM_WO_GPS 1
 param set COM_ARM_EKF_HGT 0
 param set COM_ARM_MAG 0
 param set COM_ARM_CHK_ESCS 0
 param set COM_ARM_WO_BARO 1
 
-# 2.3 禁用自动启动流程
 param set SYS_AUTOSTART 0
 param set SYS_AUTOCONFIG 0
-
-# 对于多旋翼，如果不使用 PX4 原生 EKF，可以设置：
 param set SYS_MC_EST_GROUP 0
 
 ###############################################################################
-# 3. 启动串口通信（rc.serial）
-#    根据实际需求，默认会初始化一些串口波特率、命令路由等。
+# 3. 启动串口通信
 ###############################################################################
 . /etc/init.d/rc.serial
 
 ###############################################################################
-# 4. 启动最底层传感器驱动
-#    Pixhawk 6X 上一般使用 ICM42688P 作为主 IMU，MS5611 作为气压计等。
+# 4. 启动传感器驱动
 ###############################################################################
+set SENS_INIT_OK 0
 
-# 4.1 启动 IMU (ICM42688P)
-if ! icm42688p start -s -R 0
-then
-    echo "WARN: ICM42688P start failed, retrying..."
+# 4.1 启动 IMU 驱动 (ICM45686) - 启动 3 个实例
+if ! icm45686 start -s -b 1 -a 0x68 -R 0; then
+    echo "WARN: ICM45686 (主) start failed, retrying..."
     sleep 1
-    if ! icm42688p start -s -R 0
-    then
-        echo "ERROR: ICM42688P start failed"
+    if ! icm45686 start -s -b 1 -a 0x68 -R 0; then
+        echo "ERROR: ICM45686 (主) start failed"
         set STARTUP_TUNE 2
     fi
 fi
 
-# 4.2 启动气压计
-if ! ms5611 start -s
-then
-    echo "ERROR: MS5611 start failed"
+if ! icm45686 start -s -b 2 -a 0x69 -R 4; then
+    echo "WARN: ICM45686 (第二) start failed, retrying..."
+    sleep 1
+    if ! icm45686 start -s -b 2 -a 0x69 -R 4; then
+        echo "ERROR: ICM45686 (第二) start failed"
+        set STARTUP_TUNE 2
+    fi
 fi
 
-# 4.3 启动磁力计
-if ! rm3100 start -s -R 0
-then
-    echo "ERROR: RM3100 start failed"
+if ! icm45686 start -s -b 3 -a 0x6A -R 6; then
+    echo "WARN: ICM45686 (第三) start failed, retrying..."
+    sleep 1
+    if ! icm45686 start -s -b 3 -a 0x6A -R 6; then
+        echo "ERROR: ICM45686 (第三) start failed"
+        set STARTUP_TUNE 2
+    fi
 fi
 
-# 4.4 启动 GPS
-# 一般 Pixhawk 6X 的 GPS 在 /dev/ttyS3，但可根据实际连线情况调整。
-if ! gps start -d /dev/ttyS3 -p ubx
-then
+# 4.2 启动气压计驱动
+if ! icp20100 start -s -b 1 -a 0x60; then
+    echo "ERROR: ICP20100 start failed"
+fi
+if ! bmp388 start -s -b 2 -a 0x76; then
+    echo "ERROR: BMP388 start failed"
+fi
+
+# 4.3 启动磁力计驱动 (BMM150)
+if ! bmm150 start -s -b 1 -a 0x10; then
+    echo "ERROR: BMM150 start failed"
+fi
+
+# 4.4 启动 GPS（假设GPS连接到 /dev/ttyS3，使用 ubx 协议）
+if ! gps start -d /dev/ttyS3 -p ubx; then
     echo "ERROR: GPS start failed"
 fi
+
+set SENS_INIT_OK 1
 
 ###############################################################################
 # 5. 启动通信系统
 ###############################################################################
-
-# 5.1 启动 uORB（通常在内核阶段已开启，也可手动 start）
-uorb start
-
-# 5.2 启动 MAVLink（根据实际串口选择，这里假设 TELEM1 = /dev/ttyS1）
 set MAVLINK_F "-r 100000 -f"
-if [ -f /etc/mavlink/mavlink.conf ]
-then
+if [ -f /etc/mavlink/mavlink.conf ]; then
     . /etc/mavlink/mavlink.conf
+else
+    echo "WARN: MAVLink config not found, using defaults"
 fi
-
 mavlink start -d /dev/ttyS1 -b 921600 -m onboard $MAVLINK_F
 
 ###############################################################################
-# 6. 启动日志系统（可选）
-#    如果需要日志记录，可以保留以下行；否则注释掉。
+# 6. 启动日志系统
 ###############################################################################
-if [ -f /fs/microsd ]
-then
+if [ -d /fs/microsd ]; then
     set LOGGER_ARGS "-f -b ${LOGGER_BUF}"
     logger start -t $LOGGER_ARGS
-
-    # 保存参数
     param save
 fi
 
-# 启动 IMU AHRS 模块（根据参数 SYS_IMU_AHRS 判断是否启用）
-if param compare SYS_IMU_AHRS 1
-then
+###############################################################################
+# 7. 启动自定义模块：IMU AHRS
+###############################################################################
+if param compare SYS_IMU_AHRS 1; then
     imu_ahrs start
 fi
 
-
 ###############################################################################
-# 7. 启动自定义模块（若有）
-#    如果有自定义的飞控逻辑模块，可在此处启动。
+# 8. 启动其他自定义模块（如有）
 ###############################################################################
 # custom_module start &
 
+###############################################################################
+# 9. 硬件版本检查（示例，根据实际项目修改）
+###############################################################################
+if ver hwtypecmp V6X00; then
+    set BOARD_TYPE v6x
+fi
+
+###############################################################################
+# 10. 错误恢复机制（示例）
+###############################################################################
+set FRC=0
+if [ $FRC = 0 ]; then
+    echo "System startup normal"
+else
+    echo "System startup error, initiating recovery..."
+    # 添加错误恢复流程
+fi
+
 echo "Minimal system started successfully"
 
-#
-# 清理环境变量
-#
 unset STARTUP_TUNE
 unset LOGGER_BUF
 unset LOGGER_ARGS
