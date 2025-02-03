@@ -41,6 +41,10 @@ px4_add_romfs_files(
 	rc.sensors
 	rc.vehicle_setup
 
+	# 新增的配置文件
+	rc.config           # 配置类型文件
+	rc.minimal          # 最小化启动脚本
+
 	# TODO
 	rc.balloon_apps
 	rc.balloon_defaults
