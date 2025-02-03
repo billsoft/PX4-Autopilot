@@ -112,6 +112,13 @@ then
     param save
 fi
 
+# 启动 IMU AHRS 模块（根据参数 SYS_IMU_AHRS 判断是否启用）
+if param compare SYS_IMU_AHRS 1
+then
+    imu_ahrs start
+fi
+
+
 ###############################################################################
 # 7. 启动自定义模块（若有）
 #    如果有自定义的飞控逻辑模块，可在此处启动。

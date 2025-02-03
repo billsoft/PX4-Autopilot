@@ -1,0 +1,22 @@
+menuconfig IMU_AHRS
+	bool "IMU AHRS Attitude Estimator"
+	default n
+	---help---
+		Enable support for IMU AHRS attitude estimator
+
+if IMU_AHRS
+
+config IMU_AHRS_EN
+	bool "Enable IMU AHRS module"
+	default n
+	help
+		Enable IMU AHRS module at system startup
+
+config IMU_AHRS_FREQ_HZ
+	int "IMU AHRS update frequency (Hz)"
+	default 100
+	range 10 200
+	help
+		IMU AHRS module update frequency in Hz
+
+endif # IMU_AHRS
