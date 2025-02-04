@@ -1,23 +1,27 @@
 #!/bin/sh
-# 注释：此脚本为 PX4 的主启动脚本，用于初始化并启动 PX4 飞控系统及相关服务。
-# set +e 的含义是暂时忽略错误，以便继续执行；如果需要严格错误退出则使用 set -e。
 set +e
-#set -x  # 如需调试可取消注释
+set -x  # 如需调试可取消注释
 
 ###############################################################################
 # 0. 预加载 rc.config 判断启动模式（minimal 或 full）
 ###############################################################################
+# 设置默认值
+CONFIG_TYPE="full"
+
+# 读取配置文件
 if [ -f /etc/init.d/rc.config ]; then
-    echo "Loading rc.config..."
+    echo "[DEBUG] Loading rc.config..."
     . /etc/init.d/rc.config
+    echo "[DEBUG] Loaded CONFIG_TYPE=${CONFIG_TYPE}"
 else
     echo "rc.config not found. Using default full configuration."
-    CONFIG_TYPE="full"
 fi
 
-if [ "$CONFIG_TYPE" = "minimal" ]; then
-    echo "Minimal configuration selected."
+# 检查配置类型
+if [ "${CONFIG_TYPE}" = "minimal" ]; then
+    echo "[DEBUG] Minimal configuration selected."
     if [ -f /etc/init.d/rc.minimal ]; then
+        echo "[DEBUG] Executing rc.minimal..."
         . /etc/init.d/rc.minimal
         exit 0
     else
@@ -25,6 +29,7 @@ if [ "$CONFIG_TYPE" = "minimal" ]; then
         exit 1
     fi
 fi
+
 
 ###############################################################################
 # 1. 设置默认环境变量（尽量减少空格以节省闪存占用）

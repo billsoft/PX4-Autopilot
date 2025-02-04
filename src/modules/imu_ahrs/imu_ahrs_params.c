@@ -12,8 +12,7 @@
  *    notice, this list of conditions and the following disclaimer in
  *    the documentation and/or other materials provided with the
  *    distribution.
- * 3. Neither the name PX4 nor the names
- *  of its contributors may be
+ * 3. Neither the name PX4 nor the names of its contributors may be
  *    used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -34,20 +33,29 @@
 
 /**
  * @file imu_ahrs_params.c
- * IMU姿态估计模块参数定义
+ * IMU AHRS module parameters
+ *
+ * @author Your Name <your.email@example.com>
  */
 
 /**
- * Enable IMU AHRS module
+ * IMU AHRS Enable
+ *
+ * Enable/disable the IMU AHRS module
  *
  * @boolean
  * @reboot_required true
  * @group IMU AHRS
+ *
+ * @value 0 Disabled
+ * @value 1 Enabled
  */
-PARAM_DEFINE_INT32(IMU_AHRS_EN, 0);
+PARAM_DEFINE_INT32(SYS_IMU_AHRS, 0);
 
 /**
- * IMU AHRS运行频率
+ * IMU AHRS Update Rate
+ *
+ * Defines the update rate of the AHRS algorithm
  *
  * @unit Hz
  * @min 10
@@ -56,43 +64,39 @@ PARAM_DEFINE_INT32(IMU_AHRS_EN, 0);
  * @increment 10
  * @reboot_required true
  * @group IMU AHRS
+ *
+ * @value 50 50 Hz
+ * @value 100 100 Hz
+ * @value 200 200 Hz
  */
 PARAM_DEFINE_INT32(IMU_AHRS_FREQ_HZ, 100);
 
 /**
- * Enable IMU AHRS 模块
+ * Accelerometer Weight
  *
- * @boolean
- * @group IMU AHRS
+ * Weight of accelerometer data in complementary filter.
+ * Higher values give faster response but more noise sensitivity.
  *
- * 0：关闭 imu_ahrs 模块
- * 1：启用 imu_ahrs 模块
- */
-PARAM_DEFINE_INT32(SYS_IMU_AHRS, 0);
-
-/**
- * 加速度权重
- *
- * 互补滤波中加速度数据的权重
- *
+ * @unit norm
  * @min 0.0
  * @max 1.0
- * @decimal 2
- * @increment 0.01
+ * @decimal 3
+ * @increment 0.001
  * @group IMU AHRS
  */
 PARAM_DEFINE_FLOAT(IMU_AHRS_W_ACC, 0.02f);
 
 /**
- * 磁力计权重(预留)
+ * Magnetometer Weight
  *
- * 预留给后续磁力计融合使用
+ * Weight of magnetometer data in complementary filter.
+ * Reserved for future magnetometer fusion.
  *
+ * @unit norm
  * @min 0.0
  * @max 1.0
- * @decimal 2
- * @increment 0.01
+ * @decimal 3
+ * @increment 0.001
  * @group IMU AHRS
  */
 PARAM_DEFINE_FLOAT(IMU_AHRS_W_MAG, 0.0f);
-
