@@ -1,6 +1,8 @@
 #include "QuaternionMath.hpp"
 #include <cmath>
-#include <algorithm>
+#include <cstdlib>
+#include <px4_platform_common/defines.h>
+#include <mathlib/math/Functions.hpp>
 
 namespace QuaternionMath {
 
@@ -22,14 +24,46 @@ namespace QuaternionMath {
 
     void normalize(float q[4])
     {
-        // 计算四元数模长
-        float mag = std::sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
-        // 防止除零
-        mag = std::max(mag, 1e-12f);
-        q[0] /= mag;
-        q[1] /= mag;
-        q[2] /= mag;
-        q[3] /= mag;
+        float norm = sqrtf(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+        if (norm > 1e-12f) {
+            q[0] /= norm;
+            q[1] /= norm;
+            q[2] /= norm;
+            q[3] /= norm;
+        }
+    }
+
+    void toEuler(const float q[4], float *roll, float *pitch, float *yaw)
+    {
+        float q0q0 = q[0] * q[0];
+        float q0q1 = q[0] * q[1];
+        float q0q2 = q[0] * q[2];
+        float q0q3 = q[0] * q[3];
+        float q1q1 = q[1] * q[1];
+        float q1q2 = q[1] * q[2];
+        float q1q3 = q[1] * q[3];
+        float q2q2 = q[2] * q[2];
+        float q2q3 = q[2] * q[3];
+        float q3q3 = q[3] * q[3];
+
+        *roll = atan2f(2.0f * (q0q1 + q2q3), q0q0 - q1q1 - q2q2 + q3q3);
+        *pitch = asinf(2.0f * (q0q2 - q1q3));
+        *yaw = atan2f(2.0f * (q0q3 + q1q2), q0q0 + q1q1 - q2q2 - q3q3);
+    }
+
+    void fromEuler(float roll, float pitch, float yaw, float q[4])
+    {
+        float cr = cosf(roll * 0.5f);
+        float sr = sinf(roll * 0.5f);
+        float cp = cosf(pitch * 0.5f);
+        float sp = sinf(pitch * 0.5f);
+        float cy = cosf(yaw * 0.5f);
+        float sy = sinf(yaw * 0.5f);
+
+        q[0] = cr * cp * cy + sr * sp * sy;
+        q[1] = sr * cp * cy - cr * sp * sy;
+        q[2] = cr * sp * cy + sr * cp * sy;
+        q[3] = cr * cp * sy - sr * sp * cy;
     }
 
 }

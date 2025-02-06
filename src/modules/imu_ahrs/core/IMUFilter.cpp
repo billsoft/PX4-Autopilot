@@ -1,14 +1,16 @@
 #include "IMUFilter.hpp"
 #include <cmath>
-#include <algorithm>
+#include <cstdlib>
+#include <px4_platform_common/defines.h>
+#include <mathlib/math/Functions.hpp>
 
 IMUFilter::IMUFilter()
     : _accelX(0.0f, 1.0f, 0.001f, 0.1f),
       _accelY(0.0f, 1.0f, 0.001f, 0.1f),
       _accelZ(9.81f, 1.0f, 0.001f, 0.1f),
-      _gyroX2D(0.0f, 0.0f, 1e-3f, nullptr, 0.1f), // 若未提供 p_init，则内部采用默认
-      _gyroY2D(0.0f, 0.0f, 1e-3f, nullptr, 0.1f),
-      _gyroZ2D(0.0f, 0.0f, 0.5f, nullptr, 1e-4f),
+      _gyroX2D(0.0f, 0.0f, 1e-3f, 0.1f),
+      _gyroY2D(0.0f, 0.0f, 1e-3f, 0.1f),
+      _gyroZ2D(0.0f, 0.0f, 0.5f, 1e-4f),
       _gyroAngleX(0.0f),
       _gyroAngleY(0.0f),
       _gyroAngleZ(0.0f)
@@ -22,8 +24,8 @@ void IMUFilter::update_all(float ax_raw, float ay_raw, float az_raw,
                            float &gx_f, float &gy_f, float &gz_f)
 {
     // 1. 计算加速度与陀螺仪范数
-    float acc_norm = std::sqrt(ax_raw*ax_raw + ay_raw*ay_raw + az_raw*az_raw);
-    float gyro_norm = std::sqrt(gx_raw*gx_raw + gy_raw*gy_raw + gz_raw*gz_raw);
+    float acc_norm = sqrtf(ax_raw*ax_raw + ay_raw*ay_raw + az_raw*az_raw);
+    float gyro_norm = sqrtf(gx_raw*gx_raw + gy_raw*gy_raw + gz_raw*gz_raw);
 
     // 2. 判断运动状态，并调整二维卡尔曼滤波器的过程噪声参数
     const char* motion_state = detect_motion_state(acc_norm, gyro_norm);
@@ -43,7 +45,7 @@ void IMUFilter::update_all(float ax_raw, float ay_raw, float az_raw,
 // 根据加速度与陀螺仪数据的范数判断运动状态
 const char* IMUFilter::detect_motion_state(float acc_norm, float gyro_norm)
 {
-    if (gyro_norm < 0.1f && std::abs(acc_norm - 9.81f) < 0.2f) {
+    if (gyro_norm < 0.1f && fabsf(acc_norm - 9.81f) < 0.2f) {
         return "static";
     } else if (gyro_norm < 0.5f) {
         return "low_dynamic";
@@ -56,9 +58,9 @@ const char* IMUFilter::detect_motion_state(float acc_norm, float gyro_norm)
 void IMUFilter::adjust_gyro_parameters(const char* motion_state)
 {
     float new_q;
-    if (std::string(motion_state) == "static") {
+    if (strcmp(motion_state, "static") == 0) {
         new_q = 1e-4f;
-    } else if (std::string(motion_state) == "low_dynamic") {
+    } else if (strcmp(motion_state, "low_dynamic") == 0) {
         new_q = 1e-3f;
     } else {
         new_q = 1e-2f;

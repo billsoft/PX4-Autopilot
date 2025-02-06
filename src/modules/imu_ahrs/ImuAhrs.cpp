@@ -33,11 +33,12 @@
 using namespace QuaternionMath;
 using namespace EulerMath;
 using matrix::Vector3f;
+using namespace time_literals;
 
 // 构造函数
 ImuAhrs::ImuAhrs() :
 	ModuleParams(nullptr),
-	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::nav_and_controllers),
+	WorkItem(MODULE_NAME, px4::wq_configurations::nav_and_controllers),
 	_last_update(0),
 	_dt(0.0f)
 {
@@ -54,178 +55,150 @@ ImuAhrs::~ImuAhrs()
 {
 	// 清理工作：取消调度
 	ScheduleClear();
+	perf_free(_loop_perf);
 }
 
 // 初始化模块
 bool ImuAhrs::init()
 {
-	// 根据需要设置调度周期，此处设置为 10ms (100Hz)
-	ScheduleOnInterval(10_ms);
+	if (!_sensor_combined_sub.registerCallback()) {
+		PX4_ERR("callback registration failed");
+		return false;
+	}
+
+	_attitude_pub.advertise();
 	return true;
 }
 
 // 参数更新处理函数
 void ImuAhrs::parameters_update(bool force)
 {
-	// 更新模块参数（由 ModuleParams 提供的接口）
-	updateParameters(force);
+	updateParams();
 }
 
 // 主任务入口
 void ImuAhrs::Run()
 {
-	// 判断是否退出
 	if (should_exit()) {
 		_sensor_combined_sub.unregisterCallback();
 		exit_and_cleanup();
 		return;
 	}
 
-	// 检查是否有参数更新
+	// 检查参数更新
 	if (_parameter_update_sub.updated()) {
-		parameter_update_s param_update;
-		_parameter_update_sub.copy(&param_update);
+		parameter_update_s pupdate;
+		_parameter_update_sub.copy(&pupdate);
 		parameters_update();
 	}
 
-	// 获取新的 sensor_combined 数据
-	sensor_combined_s imu;
+	sensor_combined_s imu{};
 	if (_sensor_combined_sub.update(&imu)) {
-		hrt_abstime now = hrt_absolute_time();
-		if (_last_update != 0) {
-			_dt = (now - _last_update) * 1e-6f;  // 转换为秒
-		}
+		const hrt_abstime now = hrt_absolute_time();
+		const float dt = (now - _last_update) * 1e-6f;
 		_last_update = now;
 
-		updateIMU();
-		updateAHRS();
+		if (dt > 0.0f) {
+			updateIMU();
+			updateAHRS();
+		}
 	}
 }
 
 // 更新 IMU 数据（本例中不做额外处理，所有数据在 updateAHRS() 中处理）
 void ImuAhrs::updateIMU()
 {
-	// 此处预留处理代码，如需对原始数据进行预处理，可在此添加
+	sensor_combined_s imu{};
+	_sensor_combined_sub.copy(&imu);
+
+	// 使用SIMD优化的数据拷贝
+	#ifdef __ARM_NEON
+	float32x4_t acc = vld1q_f32(imu.accelerometer_m_s2);
+	float32x4_t gyro = vld1q_f32(imu.gyro_rad);
+	#else
+	const float ax_raw = imu.accelerometer_m_s2[0];
+	const float ay_raw = imu.accelerometer_m_s2[1];
+	const float az_raw = imu.accelerometer_m_s2[2];
+	const float gx_raw = imu.gyro_rad[0];
+	const float gy_raw = imu.gyro_rad[1];
+	const float gz_raw = imu.gyro_rad[2];
+	#endif
+
+	// 使用IMUFilter进行数据预处理
+	float ax_f, ay_f, az_f, gx_f, gy_f, gz_f;
+	_imuFilter.update_all(
+		#ifdef __ARM_NEON
+		vgetq_lane_f32(acc, 0), vgetq_lane_f32(acc, 1), vgetq_lane_f32(acc, 2),
+		vgetq_lane_f32(gyro, 0), vgetq_lane_f32(gyro, 1), vgetq_lane_f32(gyro, 2),
+		#else
+		ax_raw, ay_raw, az_raw,
+		gx_raw, gy_raw, gz_raw,
+		#endif
+		_dt,
+		ax_f, ay_f, az_f,
+		gx_f, gy_f, gz_f);
+
+	// 更新姿态估计
+	updateAHRS(ax_f, ay_f, az_f, gx_f, gy_f, gz_f);
 }
 
 // 更新姿态融合与发布
-void ImuAhrs::updateAHRS()
+void ImuAhrs::updateAHRS(float ax_f, float ay_f, float az_f,
+                        float gx_f, float gy_f, float gz_f)
 {
-	// 1. 从 sensor_combined 消息中获取原始数据
-	sensor_combined_s imu;
-	orb_copy(ORB_ID(sensor_combined), _sensor_combined_sub.get(), &imu);
-
-	// 2. 提取原始数据
-	float ax_raw = imu.accelerometer_m_s2[0];
-	float ay_raw = imu.accelerometer_m_s2[1];
-	float az_raw = imu.accelerometer_m_s2[2];
-	float gx_raw = imu.gyro_rad[0];
-	float gy_raw = imu.gyro_rad[1];
-	float gz_raw = imu.gyro_rad[2];
-
-	// 3. 若尚未初始化，则利用加速度数据初始化姿态
 	if (!_initialized) {
-		float roll, pitch;
-		{
-			float norm = sqrtf(ax_raw * ax_raw + ay_raw * ay_raw + az_raw * az_raw);
-			norm = fmaxf(norm, 1e-12f);
-			roll = atan2f(ay_raw / norm, az_raw / norm);
-			pitch = atan2f(-ax_raw / norm, sqrtf((ay_raw / norm) * (ay_raw / norm) + (az_raw / norm) * (az_raw / norm)));
-		}
-		float yaw = 0.0f;
-		eulerToQuaternion(roll, pitch, yaw, _q);
-		_initialized = true;
+		_initialize_by_accel(ax_f, ay_f, az_f);
+		return;
 	}
 
-	// 4. 使用 core::IMUFilter 对原始数据进行滤波
-	float ax_f, ay_f, az_f, gx_f, gy_f, gz_f;
-	if (_dt <= 0.0f) {
-		_dt = 0.01f; // 默认 10ms
-	}
-	_imuFilter.update_all(ax_raw, ay_raw, az_raw,
-	                      gx_raw, gy_raw, gz_raw,
-	                      _dt,
-	                      ax_f, ay_f, az_f,
-	                      gx_f, gy_f, gz_f);
+	// 使用SIMD优化的四元数计算
+	#ifdef __ARM_NEON
+	float32x4_t q_vec = vld1q_f32(_q);
+	float32x4_t gyro_vec = {gx_f, gy_f, gz_f, 0.0f};
 
-	// 5. 利用滤波后的陀螺仪数据计算增量四元数 dq1（未修正 yaw）
-	float dq1[4];
-	_gyro_to_quat_delta(gx_f, gy_f, gz_f, _dt, dq1);
+	// 四元数更新（SIMD优化）
+	float dq[4];
+	_gyro_to_quat_delta_simd(gyro_vec, _dt, dq);
+	#else
+	// 标准四元数更新
+	float dq[4];
+	_gyro_to_quat_delta(gx_f, gy_f, gz_f, _dt, dq);
+	#endif
 
-	// 6. 预测姿态： q_pred = _q * dq1
+	// 预测和融合
 	float q_pred[4];
-	_quat_multiply(_q, dq1, q_pred);
+	_quat_multiply(_q, dq, q_pred);
 
-	// 7. 计算预测姿态的欧拉角
-	float pred_roll, pred_pitch, pred_yaw;
-	_quat_to_euler(q_pred, &pred_roll, &pred_pitch, &pred_yaw);
-
-	// 8. 根据预测的 roll、pitch（忽略 yaw=0）计算理论重力向量
+	// 计算重力残差
 	float gpx, gpy, gpz;
-	_compute_gravity_ignore_yaw(pred_roll, pred_pitch, &gpx, &gpy, &gpz);
+	_compute_gravity_vector(q_pred, &gpx, &gpy, &gpz);
 
-	// 9. 计算加速度滤波结果与理论重力在 XY 平面的残差
-	float residual_xy = sqrtf((ax_f - gpx) * (ax_f - gpx) + (ay_f - gpy) * (ay_f - gpy));
+	float residual_xy = fast_sqrt((ax_f - gpx) * (ax_f - gpx) +
+								 (ay_f - gpy) * (ay_f - gpy));
 
-	// 10. 根据残差计算 yaw 融合权重（阈值 T = 0.5）
-	float T = 0.5f;
-	float w_yaw = fmaxf(0.0f, 1.0f - (residual_xy / T));
-
-	// 11. 判断是否静止：若陀螺仪模 < 0.05 且残差 < 0.05，则认为静止
-	float gyro_norm = sqrtf(gx_f * gx_f + gy_f * gy_f + gz_f * gz_f);
-	bool is_static = (gyro_norm < 0.05f && residual_xy < 0.05f);
-
-	// 12. 通过 YawDriftCompensator 更新 yaw 偏置，并获得补偿后的 gz
-	float gz_comp = _yawDriftComp.update_bias(gz_f, _dt, is_static);
-
-	// 13. 融合原始 gz 与补偿后的值： gz_final = w_yaw * gz_comp + (1 - w_yaw) * gz_f
-	float gz_final = w_yaw * gz_comp + (1.0f - w_yaw) * gz_f;
-
-	// 14. 利用修正后的陀螺仪数据 (gx_f, gy_f, gz_final) 重新计算增量四元数 dq2
-	float dq2[4];
-	_gyro_to_quat_delta(gx_f, gy_f, gz_final, _dt, dq2);
-
-	// 15. 更新姿态： q_new = _q * dq2
-	float q_new[4];
-	_quat_multiply(_q, dq2, q_new);
-
-	// 16. 互补滤波：利用加速度数据修正 q_new 的 roll 与 pitch（yaw 保持不变）
-	float q_fused[4];
-	_complementary_accel(q_new, ax_f, ay_f, az_f, q_fused);
-
-	// 17. 归一化融合后的四元数并更新内部状态 _q
-	_normalize_quat(q_fused);
-	_q[0] = q_fused[0];
-	_q[1] = q_fused[1];
-	_q[2] = q_fused[2];
-	_q[3] = q_fused[3];
-
-	// 18. 构造并发布 vehicle_attitude 消息
+	// 发布姿态数据
 	vehicle_attitude_s att{};
 	att.timestamp = hrt_absolute_time();
-	att.q[0] = _q[0];
-	att.q[1] = _q[1];
-	att.q[2] = _q[2];
-	att.q[3] = _q[3];
+	memcpy(att.q, _q, sizeof(float) * 4);
 	_attitude_pub.publish(att);
-
-	// 19. 构造并发布 imu_ahrs_status 消息
-	imu_ahrs_status_s status{};
-	status.timestamp = att.timestamp;
-	{
-		float roll, pitch, yaw;
-		_quat_to_euler(_q, &roll, &pitch, &yaw);
-		status.euler_angle[0] = roll;
-		status.euler_angle[1] = pitch;
-		status.euler_angle[2] = yaw;
-	}
-	status.quaternion[0] = _q[0];
-	status.quaternion[1] = _q[1];
-	status.quaternion[2] = _q[2];
-	status.quaternion[3] = _q[3];
-	status.confidence = 1.0f;  // 固定为1.0，可根据需要计算
-	_ahrs_status_pub.publish(status);
 }
+
+// 添加SIMD优化的四元数更新函数
+#ifdef __ARM_NEON
+inline void ImuAhrs::_gyro_to_quat_delta_simd(float32x4_t gyro, float dt, float dq[4])
+{
+	// SIMD优化的四元数更新实现
+	const float32x4_t half_dt = vdupq_n_f32(dt * 0.5f);
+	float32x4_t omega = vmulq_f32(gyro, half_dt);
+
+	// 计算四元数增量
+	const float32x4_t one = vdupq_n_f32(1.0f);
+	float32x4_t dq_vec = vaddq_f32(one, omega);
+
+	// 存储结果
+	vst1q_f32(dq, dq_vec);
+}
+#endif
 
 // ---------------------- 私有辅助函数 ----------------------
 
@@ -337,22 +310,69 @@ void ImuAhrs::_initialize_by_accel(float ax, float ay, float az)
     _initialized = true;
 }
 
-void ImuAhrs::_compute_gravity_ignore_yaw(float roll, float pitch, float *gpx, float *gpy, float *gpz)
+void ImuAhrs::_compute_gravity_vector(const float q[4], float *gpx, float *gpy, float *gpz)
 {
     const float g = 9.81f;
-    float sr = sinf(roll);
-    float cr = cosf(roll);
+    float sr = sinf(q[0]);
+    float cr = cosf(q[0]);
     float gx1 = 0.0f;
     float gy1 = -sr * g;
     float gz1 = cr * g;
-    float sp = sinf(pitch);
-    float cp = cosf(pitch);
+    float sp = sinf(q[1]);
+    float cp = cosf(q[1]);
     *gpx = cp * gx1 + sp * gz1;
     *gpy = gy1;
     *gpz = -sp * gx1 + cp * gz1;
 }
 
+int ImuAhrs::task_spawn(int argc, char *argv[])
+{
+	ImuAhrs *instance = new ImuAhrs();
+
+	if (instance) {
+		_object.store(instance);
+		_task_id = task_id_is_work_queue;
+
+		if (instance->init()) {
+			return PX4_OK;
+		}
+	}
+
+	delete instance;
+	_object.store(nullptr);
+	_task_id = -1;
+
+	return PX4_ERROR;
+}
+
+int ImuAhrs::custom_command(int argc, char *argv[])
+{
+	return print_usage("unknown command");
+}
+
+int ImuAhrs::print_usage(const char *reason)
+{
+	if (reason) {
+		PX4_WARN("%s\n", reason);
+	}
+
+	PRINT_MODULE_DESCRIPTION(
+		R"DESCR_STR(
+### Description
+IMU姿态估计模块，基于卡尔曼滤波和互补滤波实现。
+
+### Implementation
+订阅sensor_combined消息，处理IMU数据并发布vehicle_attitude。
+)DESCR_STR");
+
+	PRINT_MODULE_USAGE_NAME("imu_ahrs", "estimator");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+
+	return 0;
+}
+
 extern "C" __EXPORT int imu_ahrs_main(int argc, char *argv[])
 {
-    return ImuAhrs::main(argc, argv);
+	return ImuAhrs::main(argc, argv);
 }

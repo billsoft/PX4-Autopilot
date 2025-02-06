@@ -1,5 +1,5 @@
-#ifndef YAWDRIFTCOMPENSATOR_HPP
-#define YAWDRIFTCOMPENSATOR_HPP
+#ifndef YAW_DRIFT_COMPENSATOR_HPP
+#define YAW_DRIFT_COMPENSATOR_HPP
 
 /**
  * @file YawDriftCompensator.hpp
@@ -9,6 +9,8 @@
  * 当检测到系统处于静止或低动态时，更新yaw轴的偏置，
  * 并在后续更新中对陀螺仪z轴角速度进行补偿，减少长时间积分产生的漂移。
  */
+
+namespace imu_ahrs {
 
 class YawDriftCompensator
 {
@@ -31,9 +33,15 @@ public:
     /// 获取当前估计的yaw偏置
     float get_yaw_bias() const;
 
+    void update_bias(float gyro_z);
+    float compensate(float gyro_z);
+    void reset();
+
 private:
     float _beta;      ///< 指数平滑系数
     float _yaw_bias;  ///< 当前估计的yaw偏置
 };
 
-#endif // YAWDRIFTCOMPENSATOR_HPP
+} // namespace imu_ahrs
+
+#endif // YAW_DRIFT_COMPENSATOR_HPP

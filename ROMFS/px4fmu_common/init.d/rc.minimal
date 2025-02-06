@@ -1,160 +1,93 @@
 #!/bin/sh
 #
-# rc.minimal
-#
-# 最小化启动脚本，适用于 Pixhawk6X
+# rc.minimal - 最小化启动脚本，仅保留系统必要模块和IMU_AHRS
 #
 
-echo "Starting minimal configuration for Pixhawk6X..."
+set +e
+set -x  # 启用调试输出
+
+echo "[DEBUG-TRACE] Starting minimal configuration..."
 
 ###############################################################################
-# 1. 板级初始化与文件系统挂载检查
+# 1. 基础系统初始化
+###############################################################################
+# 设置默认环境变量
+set R /
+set PARAM_FILE /fs/microsd/params
+
+# 打印系统版本信息
+ver all
+
+###############################################################################
+# 2. 板级初始化和硬件配置
 ###############################################################################
 if [ -f /etc/init.d/rc.board ]; then
+    echo "[DEBUG] Loading board configuration..."
     . /etc/init.d/rc.board
 fi
 
-if [ -d /fs/microsd ]; then
-    echo "SD card mounted."
-    usleep 20000  # 等待20ms确保文件系统就绪
-else
-    echo "SD card not mounted!"
-fi
+###############################################################################
+# 3. 启动核心系统服务
+###############################################################################
+echo "[DEBUG] Starting core system services..."
+
+# 启动消息总线
+uorb start
+
+# 启动参数系统
+param start
+
+# 启动工作队列
+work_queue start
 
 ###############################################################################
-# 2. 设置系统参数（禁用部分安全检查）
+# 4. 启动传感器
 ###############################################################################
-param set CBRK_SUPPLY_CHK 894281
-param set CBRK_AIRSPD_CHK 894281
-param set CBRK_IO_SAFETY 22027
-param set CBRK_FLIGHTTERM 121212
-param set CBRK_ENGINEFAIL 284953
-param set CBRK_USB_CHK 197848
-
-param set COM_ARM_WO_GPS 1
-param set COM_ARM_EKF_HGT 0
-param set COM_ARM_MAG 0
-param set COM_ARM_CHK_ESCS 0
-param set COM_ARM_WO_BARO 1
-
-param set SYS_AUTOSTART 0
-param set SYS_AUTOCONFIG 0
-param set SYS_MC_EST_GROUP 0
-
-# 在执行模块前设置参数
-param set SYS_IMU_AHRS 1
+echo "[DEBUG] Starting sensors..."
+sensors start
 
 ###############################################################################
-# 3. 启动串口通信
+# 5. 启动通信模块
 ###############################################################################
-. /etc/init.d/rc.serial
+echo "[DEBUG] Starting communication modules..."
 
-###############################################################################
-# 4. 启动传感器驱动
-###############################################################################
-set SENS_INIT_OK 0
+# 启动commander（系统状态管理）
+commander start
 
-# 4.1 启动 IMU 驱动 (ICM45686) - 启动 3 个实例
-if ! icm45686 start -s -b 1 -a 0x68 -R 0; then
-    echo "WARN: ICM45686 (主) start failed, retrying..."
-    sleep 1
-    if ! icm45686 start -s -b 1 -a 0x68 -R 0; then
-        echo "ERROR: ICM45686 (主) start failed"
-        set STARTUP_TUNE 2
-    fi
-fi
-
-if ! icm45686 start -s -b 2 -a 0x69 -R 4; then
-    echo "WARN: ICM45686 (第二) start failed, retrying..."
-    sleep 1
-    if ! icm45686 start -s -b 2 -a 0x69 -R 4; then
-        echo "ERROR: ICM45686 (第二) start failed"
-        set STARTUP_TUNE 2
-    fi
-fi
-
-if ! icm45686 start -s -b 3 -a 0x6A -R 6; then
-    echo "WARN: ICM45686 (第三) start failed, retrying..."
-    sleep 1
-    if ! icm45686 start -s -b 3 -a 0x6A -R 6; then
-        echo "ERROR: ICM45686 (第三) start failed"
-        set STARTUP_TUNE 2
-    fi
-fi
-
-# 4.2 启动气压计驱动
-if ! icp20100 start -s -b 1 -a 0x60; then
-    echo "ERROR: ICP20100 start failed"
-fi
-if ! bmp388 start -s -b 2 -a 0x76; then
-    echo "ERROR: BMP388 start failed"
-fi
-
-# 4.3 启动磁力计驱动 (BMM150)
-if ! bmm150 start -s -b 1 -a 0x10; then
-    echo "ERROR: BMM150 start failed"
-fi
-
-# 4.4 启动 GPS（假设GPS连接到 /dev/ttyS3，使用 ubx 协议）
-if ! gps start -d /dev/ttyS3 -p ubx; then
-    echo "ERROR: GPS start failed"
-fi
-
-set SENS_INIT_OK 1
+# 启动MAVLink
+mavlink start -d /dev/ttyS6 -b 921600
 
 ###############################################################################
-# 5. 启动通信系统
+# 6. 启动IMU_AHRS模块
 ###############################################################################
-set MAVLINK_F "-r 100000 -f"
-if [ -f /etc/mavlink/mavlink.conf ]; then
-    . /etc/mavlink/mavlink.conf
-else
-    echo "WARN: MAVLink config not found, using defaults"
-fi
-mavlink start -d /dev/ttyS1 -b 921600 -m onboard $MAVLINK_F
-
-###############################################################################
-# 6. 启动日志系统
-###############################################################################
-if [ -d /fs/microsd ]; then
-    set LOGGER_ARGS "-f -b ${LOGGER_BUF}"
-    logger start -t $LOGGER_ARGS
+echo "[DEBUG-TRACE] Starting IMU AHRS module..."
+if [ -f /bin/imu_ahrs ]; then
+    echo "[DEBUG-TRACE] IMU AHRS binary found"
+    # 设置IMU_AHRS参数
+    param set SYS_IMU_AHRS 1
+    param set IMU_AHRS_FREQ_HZ 100
     param save
-fi
 
-###############################################################################
-# 7. 启动自定义模块：IMU AHRS
-###############################################################################
-if param compare SYS_IMU_AHRS 1; then
-    imu_ahrs start
-fi
-
-###############################################################################
-# 8. 启动其他自定义模块（如有）
-###############################################################################
-# custom_module start &
-
-###############################################################################
-# 9. 硬件版本检查（示例，根据实际项目修改）
-###############################################################################
-if ver hwtypecmp V6X00; then
-    set BOARD_TYPE v6x
-fi
-
-###############################################################################
-# 10. 错误恢复机制（示例）
-###############################################################################
-set FRC=0
-if [ $FRC = 0 ]; then
-    echo "System startup normal"
+    # 启动IMU_AHRS
+    if imu_ahrs start; then
+        echo "[DEBUG-TRACE] IMU AHRS started successfully"
+        sleep 1
+        ps | grep imu_ahrs
+    else
+        echo "[DEBUG-TRACE] Failed to start IMU AHRS"
+        echo "[DEBUG-TRACE] Error code: $?"
+    fi
 else
-    echo "System startup error, initiating recovery..."
-    # 添加错误恢复流程
+    echo "[DEBUG-TRACE] IMU AHRS binary not found in /bin"
+    ls -l /bin
 fi
 
-echo "Minimal system started successfully"
+###############################################################################
+# 7. 启动日志系统
+###############################################################################
+logger start -t -b 12 -p debug
 
-unset STARTUP_TUNE
-unset LOGGER_BUF
-unset LOGGER_ARGS
-unset MAVLINK_F
+echo "[DEBUG] Minimal system configuration completed"
+
+echo "[DEBUG] Starting Nuttx shell..."
+nsh

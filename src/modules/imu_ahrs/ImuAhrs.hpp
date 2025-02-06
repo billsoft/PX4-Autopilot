@@ -21,13 +21,18 @@
 #include <px4_platform_common/module_params.h>
 #include <px4_platform_common/posix.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
-#include <lib/matrix/matrix/math.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/imu_ahrs_status.h>
-#include <uORB/topics/parameter_update.h>   // 添加参数更新话题
+#include <uORB/topics/sensor_combined.h>
+#include <uORB/topics/parameter_update.h>
+#include <mathlib/math/filter/LowPassFilter2pVector3f.hpp>
+#include <lib/matrix/matrix/math.hpp>
+#include <lib/perf/perf_counter.h>
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
 
 // 引入核心算法相关头文件
 #include "core/IMUFilter.hpp"
@@ -66,13 +71,11 @@ protected:
     void parameters_update(bool force = false);
 
 private:
-    // 使用 DEFINE_PARAMETERS 宏定义模块参数句柄，
-    // 参数名称应与 PX4 参数系统中定义的一致
+    // 使用 DEFINE_PARAMETERS 宏定义模块参数句柄
     DEFINE_PARAMETERS(
-        (ParamInt<px4::params::SYS_IMU_AHRS>) _param_sys_imu_ahrs,
-        (ParamInt<px4::params::IMU_AHRS_FREQ_HZ>) _param_imu_ahrs_freq_hz,
-        (ParamFloat<px4::params::IMU_AHRS_W_ACC>) _param_imu_ahrs_w_acc,
-        (ParamFloat<px4::params::IMU_AHRS_W_MAG>) _param_imu_ahrs_w_mag
+        (ParamInt<px4::params::IMU_AHRS_EN>) _param_imu_ahrs_enable,
+        (ParamInt<px4::params::IMU_AHRS_RATE>) _param_imu_ahrs_rate,
+        (ParamFloat<px4::params::IMU_AHRS_W_ACC>) _param_imu_ahrs_w_acc
     )
 
     // uORB 消息订阅对象
@@ -97,7 +100,8 @@ private:
 
     // 私有辅助函数：更新 IMU 数据、融合姿态、以及各类数学运算
     void updateIMU();
-    void updateAHRS();
+    void updateAHRS(float ax_f, float ay_f, float az_f,
+                   float gx_f, float gy_f, float gz_f);
 
     // 四元数与欧拉角计算相关函数
     void _gyro_to_quat_delta(float gx, float gy, float gz, float dt_s, float dq[4]);
@@ -107,4 +111,23 @@ private:
     void _complementary_accel(const float pred_q[4], float ax_f, float ay_f, float az_f, float fused_q[4]);
     void _initialize_by_accel(float ax, float ay, float az);
     void _compute_gravity_ignore_yaw(float roll, float pitch, float *gpx, float *gpy, float *gpz);
+
+    #ifdef __ARM_NEON
+    // SIMD优化函数
+    inline void _gyro_to_quat_delta_simd(float32x4_t gyro, float dt, float dq[4]);
+    #endif
+
+    // 快速数学函数
+    inline float fast_sqrt(float x) {
+        union {
+            float x;
+            int i;
+        } u;
+        u.x = x;
+        u.i = (1<<29) + (u.i >> 1) - (1<<22);
+        return u.x;
+    }
+
+    // 重力向量计算
+    void _compute_gravity_vector(const float q[4], float *gpx, float *gpy, float *gpz);
 };
