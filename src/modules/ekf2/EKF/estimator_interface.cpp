@@ -75,6 +75,14 @@ EstimatorInterface::~EstimatorInterface()
 #endif // CONFIG_EKF2_AUXVEL
 }
 
+/*
+ * IMU 数据积累与环形缓冲（时间延迟对齐 + 输出预测器）
+ * 关键点：
+ * - 首次调用时完成 EKF 初始化；
+ * - 输出预测器始终运行，用于低延时的姿态/速度/位置对外输出；
+ * - IMU 下采样触发后，将数据限幅并推入环形缓冲，更新延时时间戳与最小观测间隔，保证融合时不丢数据；
+ * - 当启用拖曳融合（DRAG_FUSION）时，使用当前 IMU 更新拖曳传感器样本。
+ */
 // Accumulate imu data and store to buffer at desired rate
 void EstimatorInterface::setIMUData(const imuSample &imu_sample)
 {
@@ -85,18 +93,20 @@ void EstimatorInterface::setIMUData(const imuSample &imu_sample)
 
 	_time_latest_us = imu_sample.time_us;
 
-	// the output observer always runs
+	// 输出预测器始终运行（即使不融合也保持外部状态连续）
 	_output_predictor.calculateOutputStates(imu_sample.time_us, imu_sample.delta_ang, imu_sample.delta_ang_dt,
-						imu_sample.delta_vel, imu_sample.delta_vel_dt);
+							imu_sample.delta_vel, imu_sample.delta_vel_dt);
 
 	// accumulate and down-sample imu data and push to the buffer when new downsampled data becomes available
 	if (_imu_down_sampler.update(imu_sample)) {
 
-		_imu_updated = true;
+		_imu_updated = true; // 仅在下采样触发时标记，避免过高频率推进 EKF 核心
 
 		imuSample imu_downsampled = _imu_down_sampler.getDownSampledImuAndTriggerReset();
 
-		// as a precaution constrain the integration delta time to prevent numerical problems
+		// 约束积分窗口 dt：
+		// - 防止采样抖动或 FIFO 导致的极端 dt 破坏离散模型近似；
+		// - 上下限与预测周期联动，确保数值收敛与 IMU 噪声建模合理。
 		const float filter_update_period_s = _params.ekf2_predict_us * 1e-6f;
 		const float imu_min_dt = 0.5f * filter_update_period_s;
 		const float imu_max_dt = 2.0f * filter_update_period_s;
@@ -104,18 +114,19 @@ void EstimatorInterface::setIMUData(const imuSample &imu_sample)
 		imu_downsampled.delta_ang_dt = math::constrain(imu_downsampled.delta_ang_dt, imu_min_dt, imu_max_dt);
 		imu_downsampled.delta_vel_dt = math::constrain(imu_downsampled.delta_vel_dt, imu_min_dt, imu_max_dt);
 
-		_imu_buffer.push(imu_downsampled);
+		_imu_buffer.push(imu_downsampled); // 推入延时融合缓冲（环形），保证观测与 IMU 在同一延时基准上对齐
 
 		// get the oldest data from the buffer
 		_time_delayed_us = _imu_buffer.get_oldest().time_us;
 
-		// calculate the minimum interval between observations required to guarantee no loss of data
-		// this will occur if data is overwritten before its time stamp falls behind the fusion time horizon
+		// 计算最小观测间隔：
+		// - 若数据在进入融合地平线前被覆盖则会丢样；
+		// - 该下限用于限制其他观测源的缓冲写入速率与门控，保障完整时序。
 		_min_obs_interval_us = (imu_sample.time_us - _time_delayed_us) / (_obs_buffer_length - 1);
 	}
 
 #if defined(CONFIG_EKF2_DRAG_FUSION)
-	setDragData(imu_sample);
+	setDragData(imu_sample); // 多旋翼阻力融合的 IMU 侧输入（利用当前增量进行力模型驱动）
 #endif // CONFIG_EKF2_DRAG_FUSION
 }
 
