@@ -47,6 +47,12 @@
 #include <math.h>
 #include <mathlib/mathlib.h>
 
+/*
+ * 协方差初始化（按参数与可用观测源配置初始不确定度）
+ * 注意：四元数状态初始化完成后再调用，以便姿态初值与协方差一致。
+ * - 速度/位置方差：在 GNSS/Baro/RangeFinder 可用时采用更合理的初始不确定度；
+ * - 陀螺/加计偏置、磁场、风、地形等状态的初始协方差按参数/场景设置；
+ */
 // Sets initial values for the covariance matrix
 // Do not call before quaternion states have been initialised
 void Ekf::initialiseCovariance()
@@ -112,20 +118,21 @@ void Ekf::initialiseCovariance()
 
 void Ekf::predictCovariance(const imuSample &imu_delayed)
 {
-	// predict the covariance
+	// 协方差预测：基于 IMU 增量与噪声模型推进状态不确定度
 	const float dt = 0.5f * (imu_delayed.delta_vel_dt + imu_delayed.delta_ang_dt);
 
-	// gyro noise variance
+	// 陀螺噪声方差（过程噪声）：用于姿态与角速度相关项的扩散
 	float gyro_noise = _params.ekf2_gyr_noise;
 	const float gyro_var = sq(gyro_noise);
 
-	// accel noise variance
+	// 加计噪声方差（过程噪声）：对速度/位置的积分误差有直接影响
 	float accel_noise = _params.ekf2_acc_noise;
 	Vector3f accel_var;
 
 	for (unsigned i = 0; i < 3; i++) {
 		if (_fault_status.flags.bad_acc_vertical || imu_delayed.delta_vel_clipping[i]) {
-			// Increase accelerometer process noise if bad accel data is detected
+			// 坏加速度/剪切检测：
+			// - 垂向加速度异常或剪切标志置位时，提高过程噪声以降低观测对状态的“信任”；
 			accel_var(i) = sq(BADACC_BIAS_PNOISE);
 
 		} else {
@@ -133,16 +140,15 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 		}
 	}
 
-	// calculate variances and upper diagonal covariances for quaternion, velocity, position and gyro bias states
+	// 计算四元数/速度/位置/陀螺偏置等状态的方差与上三角协方差（符号导出自自动生成代码）
 	P = sym::PredictCovariance(_state.vector(), P,
 				   imu_delayed.delta_vel / imu_delayed.delta_vel_dt, accel_var,
 				   imu_delayed.delta_ang / imu_delayed.delta_ang_dt, gyro_var,
 				   dt);
 
-	// Construct the process noise variance diagonal for those states with a stationary process model
-	// These are kinematic states and their error growth is controlled separately by the IMU noise variances
+	// 为静态过程模型的状态构造过程噪声对角项（如偏置/风/磁/地形等），与 IMU 噪声分离控制
 
-	// gyro bias: add process noise
+	// 陀螺偏置：按 dt 比例增加过程噪声，反映慢变漂移特性
 	{
 		const float gyro_bias_sig = dt * _params.ekf2_gyr_b_noise;
 		const float gyro_bias_process_noise = sq(gyro_bias_sig);
@@ -156,7 +162,7 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 		}
 	}
 
-	// accel bias: add process noise
+	// 加计偏置：按 dt 比例增加过程噪声，避免过度自信导致收敛过慢
 	{
 		const float accel_bias_sig = dt * _params.ekf2_acc_b_noise;
 		const float accel_bias_process_noise = sq(accel_bias_sig);
@@ -172,7 +178,7 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 
 
 #if defined(CONFIG_EKF2_MAGNETOMETER)
-	// mag_I: add process noise
+	// 地磁地球场（mag_I）过程噪声：考虑地磁场缓慢变化与建模误差
 	float mag_I_sig = dt * _params.ekf2_mag_e_noise;
 	float mag_I_process_noise = sq(mag_I_sig);
 
@@ -184,7 +190,7 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 		}
 	}
 
-	// mag_B: add process noise
+	// 磁偏置（mag_B）过程噪声：用于补偿传感器与车辆磁干扰的慢变项
 	float mag_B_sig = dt * _params.ekf2_mag_b_noise;
 	float mag_B_process_noise = sq(mag_B_sig);
 
@@ -201,7 +207,7 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 
 #if defined(CONFIG_EKF2_WIND)
 
-	// wind vel: add process noise
+	// 风速度过程噪声：随垂向速度的变化（高度率）缩放，反映近地/爬升阶段的气动不确定度
 	const float height_rate = _height_rate_lpf.update(_state.vel(2), imu_delayed.delta_vel_dt);
 	const float wind_vel_nsd_scaled = _params.ekf2_wind_nsd * (1.f + _params.wind_vel_nsd_scaler * fabsf(height_rate));
 	const float wind_vel_process_noise = sq(wind_vel_nsd_scaled) * dt;
@@ -219,19 +225,18 @@ void Ekf::predictCovariance(const imuSample &imu_delayed)
 #if defined(CONFIG_EKF2_TERRAIN)
 
 	if (_height_sensor_ref != HeightSensor::RANGE) {
-		// predict the state variance growth where the state is the vertical position of the terrain underneath the vehicle
-		// process noise due to errors in vehicle height estimate
+		// 地形垂向位置的不确定度增长：
+		// - 车辆高度估计误差带来的过程噪声
 		float terrain_process_noise = sq(imu_delayed.delta_vel_dt * _params.ekf2_terr_noise);
 
-		// process noise due to terrain gradient
-		terrain_process_noise += sq(imu_delayed.delta_vel_dt * _params.ekf2_terr_grad) * (sq(_state.vel(0)) + sq(_state.vel(
-						 1)));
+		// 地形梯度导致的过程噪声：与水平速度平方相关，反映地形变化导致高度估计不确定度增加
+		terrain_process_noise += sq(imu_delayed.delta_vel_dt * _params.ekf2_terr_grad) * (sq(_state.vel(0)) + sq(_state.vel(1)));
 		P(State::terrain.idx, State::terrain.idx) += terrain_process_noise;
 	}
 
 #endif // CONFIG_EKF2_TERRAIN
 
-	// covariance matrix is symmetrical, so copy upper half to lower half
+	// 协方差矩阵对称化：复制上三角到下三角，随后限幅防止发散
 	for (unsigned row = 0; row < State::size; row++) {
 		for (unsigned column = 0; column < row; column++) {
 			P(row, column) = P(column, row);

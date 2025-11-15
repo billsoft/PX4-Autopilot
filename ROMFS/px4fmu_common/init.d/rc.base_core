@@ -1,0 +1,16 @@
+#!/bin/sh
+set +e
+set R /
+. ${R}etc/init.d/rc.serial
+. ${R}etc/init.d/rc.sensors
+sensors start
+if param greater -s SYS_USB_AUTO -1
+then
+    if ! cdcacm_autostart start
+    then
+        sercon
+        mavlink start -d /dev/ttyACM0
+    fi
+fi
+param set EKF2_EN 0
+mavlink boot_complete

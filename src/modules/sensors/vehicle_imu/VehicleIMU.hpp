@@ -63,6 +63,14 @@ using namespace time_literals;
 namespace sensors
 {
 
+/*
+ * VehicleIMU：整合加速度/陀螺原始数据，进行积分与质量度量，发布 IMU 增量
+ * 关键功能：
+ * - 使用积分器将原始速率转换为 `delta_ang`/`delta_vel` 及各自 dt；
+ * - 跟踪剪切（clipping）与振动指标，提供状态话题用于健康评估；
+ * - 维护设备 ID 与校准计数，支持在飞行中更新偏置学习；
+ * - 以固定积分周期 `_imu_integration_interval_us` 发布 `vehicle_imu_s` 供 EKF 使用。
+ */
 class VehicleIMU : public ModuleParams, public px4::ScheduledWorkItem
 {
 public:
@@ -96,6 +104,7 @@ private:
 	// return the square of two floating point numbers
 	static constexpr float sq(float var) { return var * var; }
 
+	// 发布 IMU 增量与状态（供 EKF2 与监测使用）
 	uORB::PublicationMulti<vehicle_imu_s> _vehicle_imu_pub{ORB_ID(vehicle_imu)};
 	uORB::PublicationMulti<vehicle_imu_status_s> _vehicle_imu_status_pub{ORB_ID(vehicle_imu_status)};
 
@@ -114,6 +123,7 @@ private:
 	calibration::Accelerometer _accel_calibration{};
 	calibration::Gyroscope _gyro_calibration{};
 
+	// 加速度/角速度积分器（含锥度项补偿，降低姿态积分误差）
 	sensors::Integrator       _accel_integrator{};
 	sensors::IntegratorConing _gyro_integrator{};
 
@@ -155,6 +165,7 @@ private:
 	float _coning_norm_accum{0};
 	float _coning_norm_accum_total_time_s{0};
 
+	// 剪切标志（在饱和/高振动情况下提示 EKF 增噪与门控）
 	uint8_t     _delta_angle_clipping{0};
 	uint8_t     _delta_velocity_clipping{0};
 

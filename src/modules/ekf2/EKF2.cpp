@@ -724,9 +724,10 @@ void EKF2::Run()
 
 					_device_id_accel = sensor_selection.accel_device_id;
 
+					// 设备加速度计切换：重置加计偏置，避免旧设备学习结果污染新设备
 					_ekf.resetAccelBias();
 
-					// reset bias learning
+					// 重置偏置学习统计
 					_accel_cal = {};
 				}
 
@@ -734,23 +735,32 @@ void EKF2::Run()
 
 					_device_id_gyro = sensor_selection.gyro_device_id;
 
+					// 设备陀螺仪切换：重置陀螺偏置，保证新设备的偏置估计从干净初值开始
 					_ekf.resetGyroBias();
 
-					// reset bias learning
+					// 重置偏置学习统计
 					_gyro_cal = {};
 				}
 			}
 		}
 	}
 
+	/*
+	 * IMU 更新与 EKF 推动（低延时输出 + 时间对齐）
+	 * - 使用 VehicleIMU 发布的积分增量构造 imu_sample_new（含 delta_ang/delta_vel 及各自 dt）
+	 * - 推送至 ECL EKF：setIMUData 进行下采样、限幅与环形缓冲，同时运行输出预测器实现低延时姿态输出
+	 * - 维护时间滑移指标（_last_time_slip_us），并在同一周期收集各观测源样本，随后执行 _ekf.update()
+	 * - 更新结束后发布姿态/位置/偏置/风等话题与调试状态
+	 */
 	if (imu_updated) {
 		const hrt_abstime now = imu_sample_new.time_us;
 
-		// push imu data into estimator
+		// 推送 IMU 数据到 EKF（时间对齐与缓冲在 EstimatorInterface 内部完成）
 		_ekf.setIMUData(imu_sample_new);
-		PublishAttitude(now); // publish attitude immediately (uses quaternion from output predictor)
+		// 立即发布姿态（使用输出预测器的四元数，降低外部延时）
+		PublishAttitude(now);
 
-		// integrate time to monitor time slippage
+		// 累积积分时间用于监控时间滑移（检测积分与时间戳不一致）
 		if (_start_time_us > 0) {
 			_integrated_time_us += imu_dt;
 			_last_time_slip_us = (imu_sample_new.time_us - _start_time_us) - _integrated_time_us;
@@ -760,7 +770,7 @@ void EKF2::Run()
 			_last_time_slip_us = 0;
 		}
 
-		// ekf2_timestamps (using 0.1 ms relative timestamps)
+		// 记录各观测源的相对时间戳（0.1ms 分辨率），用于融合与日志分析
 		ekf2_timestamps_s ekf2_timestamps {
 			.timestamp = now,
 			.airspeed_timestamp_rel = ekf2_timestamps_s::RELATIVE_TIMESTAMP_INVALID,
@@ -801,22 +811,22 @@ void EKF2::Run()
 		// run the EKF update and output
 		const hrt_abstime ekf_update_start = hrt_absolute_time();
 
-		if (_ekf.update()) {
+		if (_ekf.update()) { // EKF 核心更新成功后发布各类输出话题
 			perf_set_elapsed(_ekf_update_perf, hrt_elapsed_time(&ekf_update_start));
 
-			PublishLocalPosition(now);
-			PublishOdometry(now, imu_sample_new);
-			PublishGlobalPosition(now);
-			PublishSensorBias(now);
+			PublishLocalPosition(now);   // 车辆局部位置（NED）
+			PublishOdometry(now, imu_sample_new); // 里程计（包含姿态/位置/速度）
+			PublishGlobalPosition(now);  // 全局位置（经纬度/高度）
+			PublishSensorBias(now);      // 传感器偏置（陀螺/加计/磁/气压等）
 
 #if defined(CONFIG_EKF2_WIND)
 			PublishWindEstimate(now);
 #endif // CONFIG_EKF2_WIND
 
 			// publish status/logging messages
-			PublishEventFlags(now);
-			PublishStatus(now);
-			PublishStatusFlags(now);
+			PublishEventFlags(now);      // 融合事件标志（帮助诊断融合开/关）
+			PublishStatus(now);          // 状态摘要与健康信息
+			PublishStatusFlags(now);     // 详细状态位（用于地面站显示/日志）
 
 			if (_param_ekf2_log_verbose.get()) {
 				PublishAidSourceStatus(now);
