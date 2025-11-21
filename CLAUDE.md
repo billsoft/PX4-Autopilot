@@ -58,6 +58,28 @@ make distclean                     # Full clean + submodules
 make submodulesupdate              # Update git submodules
 ```
 
+**Advanced build options:**
+```bash
+# Sanitizer builds (SITL only, for debugging memory/threading issues)
+PX4_ASAN=1 make px4_sitl_default   # Address Sanitizer (memory errors)
+PX4_MSAN=1 make px4_sitl_default   # Memory Sanitizer (uninitialized reads)
+PX4_TSAN=1 make px4_sitl_default   # Thread Sanitizer (data races)
+PX4_UBSAN=1 make px4_sitl_default  # Undefined Behavior Sanitizer
+
+# Build type override
+PX4_CMAKE_BUILD_TYPE=Debug make px4_sitl_default
+PX4_CMAKE_BUILD_TYPE=Release make px4_sitl_default
+
+# Parallel build control
+make px4_sitl_default -j8          # Force 8 parallel jobs
+
+# Verbose build output
+VERBOSE=1 make px4_sitl_default    # Show detailed build commands
+
+# Replay mode (for log replay debugging)
+replay=1 make px4_sitl_default     # Build with replay support
+```
+
 ## Architecture
 
 ### Core Components
@@ -219,6 +241,7 @@ Always test in SITL first with `make px4_sitl gz_x500` before flashing to hardwa
 - NuttX RTOS for embedded flight controllers (most boards)
 - POSIX for SITL and companion computers (Linux/macOS)
 - QURT for Snapdragon boards
+- Windows: Supported via MSYS2/Cygwin (uses MSYS Makefiles when Ninja unavailable)
 
 **External modules:**
 - Can be built outside main tree via `EXTERNAL_MODULES_LOCATION`
@@ -273,9 +296,10 @@ Format: `boards/VENDOR/MODEL/VARIANT.px4board`
 - SITL: `make px4_sitl_default jmavsim` then attach with GDB
 - Hardware: Use debugger probe (SWD/JTAG)
 
-## 重要提示关于修改错误不要新建文件而是在原理的基础上改好
+## Code Modification Guidelines
 
-** 不要新建文件而是在原理的基础上改好**
-- 禁止在不原有错误文件额基础上新建fix文件
-- 禁止fixed文件而是在原有报错的文件上修改
-- 错误文件代码过多难以阅读时可以采用设计模式拆分，而不是重复创建功能相同的替代文件
+**IMPORTANT: Modify existing files rather than creating new ones**
+- Fix bugs directly in the original files, do not create separate "fix" files
+- Refactor existing code rather than creating duplicate replacement files
+- If a file becomes too large or complex, use design patterns to split it appropriately
+- Maintain the existing architecture and file structure whenever possible

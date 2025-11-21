@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+#!/bin/sh
+
+# MAVLink 输出在 EXT2 (/dev/ttyS3)，921600 波特
+# 频率与速率调整为更稳健的 200 Hz / 200 kB/s
+
+mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 200000
+sleep 1
+
+# IMU 高速数据（加速度/陀螺/磁力计/气压） 200 Hz
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+
+# 融合姿态四元数 + 角速度 200 Hz
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
+
+# 可选输出（按需启用）
+# mavlink stream -d /dev/ttyS3 -s ATTITUDE -r 50
+# mavlink stream -d /dev/ttyS3 -s LOCAL_POSITION_NED -r 50
+# mavlink stream -d /dev/ttyS3 -s GPS_RAW_INT -r 10
+
+echo "UART4 MAVLink configured: 200Hz IMU+ATT_QUAT on /dev/ttyS3 @ 921600"

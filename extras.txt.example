@@ -1,0 +1,46 @@
+#
+# PX4 Extras Configuration File
+# 将此文件复制到 Pixhawk SD卡: /fs/microsd/etc/extras.txt
+#
+# 这个文件会在PX4启动时自动执行
+# 用于自定义启动配置，不会被固件更新覆盖
+#
+
+# ============================================
+# UART4 高速MAVLink数据输出配置
+# 输出内容：
+#   - IMU原始数据（加速度、陀螺仪）
+#   - 磁力计数据
+#   - 融合姿态四元数
+# 频率：300Hz
+# 波特率：921600
+# 设备：/dev/ttyS3 (UART4 & I2C端口)
+# ============================================
+
+# 启动MAVLink在UART4
+mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
+
+# 配置300Hz数据流
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
+
+# 打印确认消息
+echo "[extras] UART4 MAVLink: 300Hz IMU+MAG+ATT @ 921600bps"
+
+# ============================================
+# 可选配置（根据需要取消注释）
+# ============================================
+
+# 如果需要欧拉角格式的姿态数据
+# mavlink stream -d /dev/ttyS3 -s ATTITUDE -r 50
+
+# 如果需要位置数据
+# mavlink stream -d /dev/ttyS3 -s LOCAL_POSITION_NED -r 50
+# mavlink stream -d /dev/ttyS3 -s GLOBAL_POSITION_INT -r 10
+
+# 如果需要GPS原始数据
+# mavlink stream -d /dev/ttyS3 -s GPS_RAW_INT -r 5
+
+# ============================================
+# 其他自定义命令可以添加在下面
+# ============================================
