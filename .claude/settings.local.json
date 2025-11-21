@@ -9,7 +9,11 @@
       "Bash(git push:*)",
       "Bash(git fetch:*)",
       "Bash(git merge:*)",
-      "Bash(git submodule:*)"
+      "Bash(git submodule:*)",
+      "Bash(git config:*)",
+      "Bash(git clean:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
