@@ -5,7 +5,11 @@
       "Bash(python tests/run_all_tests.py:*)",
       "WebSearch",
       "WebFetch(domain:docs.px4.io)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(git submodule:*)"
     ],
     "deny": [],
     "ask": []
