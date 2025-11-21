@@ -46,6 +46,9 @@ px4_add_romfs_files(
 	rc.balloon_defaults
 	rc.sysinit
 	rc.base_core
+
+	# Custom high-rate MAVLink on EXT2 (UART4)
+	rc.uart4_mavlink
 )
 
 if(CONFIG_MODULES_AIRSHIP_ATT_CONTROL)

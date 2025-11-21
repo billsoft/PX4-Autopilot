@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(make:*)",
-      "Bash(python tests/run_all_tests.py:*)"
+      "Bash(python tests/run_all_tests.py:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.px4.io)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []
