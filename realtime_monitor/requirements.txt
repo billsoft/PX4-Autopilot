@@ -1,0 +1,19 @@
+# Pixhawk 实时姿态监控系统 - 依赖包
+
+# 核心依赖
+asyncio-compat>=0.1.2  # asyncio兼容性
+pymavlink>=2.4.41      # MAVLink协议支持
+pyserial>=3.5          # 串口通信
+pyserial-asyncio>=0.6  # 异步串口支持（可选，用于更好的性能）
+
+# 数据处理
+numpy>=1.21.0          # 数值计算
+
+# 可视化
+matplotlib>=3.5.0      # 绘图库
+
+# 可选：性能提升
+# uvloop>=0.17.0       # 高性能事件循环（Linux/Mac，性能提升30-50%）
+
+# 可选：数据保存
+# pandas>=1.3.0        # 数据分析和导出
