@@ -55,7 +55,7 @@ python examples/realtime_plot.py --port /dev/ttyUSB0 --baud 921600
 - IMU数据绘图（加速度、陀螺仪）
 - 磁力计数据绘图
 - 姿态四元数/欧拉角绘图
-- 实时更新（支持300Hz）
+- 实时更新（支持200Hz稳定/300Hz峰值）
 - 数据统计（频率、丢包率）
 
 ## 使用说明

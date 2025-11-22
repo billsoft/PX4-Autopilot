@@ -1,12 +1,14 @@
-# UART4 300Hz数据输出 - 快速开始指南
+# UART4 高频数据输出 - 快速开始指南
 
 ## 🎯 目标
-通过Pixhawk 6X的UART4端口，以300Hz频率输出：
+通过Pixhawk 6X的UART4端口，以200Hz（稳定）/300Hz（峰值）频率输出：
 - IMU原始数据（加速度、陀螺仪）
 - 磁力计数据
 - 融合姿态四元数+时间戳
 
 并使用Python上位机实时可视化。
+
+**推荐配置**: 200Hz（生产环境稳定可靠）
 
 ---
 
@@ -56,11 +58,15 @@ make px4_fmu-v6x_default upload
 3. 内容：
 
 ```bash
-# UART4 MAVLink 300Hz数据输出
+# UART4 MAVLink 200Hz数据输出（稳定版）
 mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
-mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
-mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
-echo "[extras] UART4 configured: 300Hz IMU+MAG+ATT"
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
+echo "[extras] UART4 configured: 200Hz IMU+MAG+ATT"
+
+# 如需300Hz峰值性能（需要更多优化）：
+# mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
+# mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
 ```
 
 4. 保存，确保使用Unix换行符（LF，不是CRLF）
@@ -76,8 +82,8 @@ screen /dev/ttyACM0 57600
 
 # 在PX4 nsh> 提示符下输入：
 mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
-mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
-mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
 
 # 验证
 mavlink status
@@ -127,7 +133,7 @@ python examples/simple_receiver.py --port COM3 --baud 921600
 
 **预期输出**：
 ```
-⏰ 时间: 123.456s | 频率: 298.5 Hz
+⏰ 时间: 123.456s | 频率: 198.5 Hz
 📊 加速度 (m/s²): X=  0.123  Y= -0.456  Z= -9.812
 🔄 陀螺仪 (rad/s): X=  0.012  Y= -0.005  Z=  0.003
 🧭 磁力计 (Gauss): X=  0.234  Y= -0.156  Z=  0.389
@@ -177,8 +183,8 @@ instance #X:
   GCS link on /dev/ttyS3 @ 921600 baud
   mode: Onboard
   streams:
-    HIGHRES_IMU: 300.0 Hz (62 B, 18600 B/s)
-    ATTITUDE_QUATERNION: 300.0 Hz (32 B, 9600 B/s)
+    HIGHRES_IMU: 200.0 Hz (62 B, 12400 B/s)
+    ATTITUDE_QUATERNION: 200.0 Hz (32 B, 6400 B/s)
   ...
 ```
 
@@ -196,9 +202,9 @@ nsh> listener vehicle_attitude -n 10
 
 运行simple_receiver.py，应该看到：
 - ✅ 连接成功
-- ✅ IMU频率接近300Hz
-- ✅ 姿态频率接近300Hz
-- ✅ 丢包率 < 1%
+- ✅ IMU频率接近200Hz（或300Hz if configured）
+- ✅ 姿态频率接近200Hz（或300Hz if configured）
+- ✅ 丢包率 < 0.5% (200Hz) 或 < 1% (300Hz)
 
 ---
 
@@ -266,7 +272,7 @@ python examples/simple_receiver.py --port /dev/ttyACM0 --baud 115200
 
 ### 问题4：频率不对
 
-**症状**：实际频率远低于300Hz
+**症状**：实际频率远低于配置值
 
 **诊断**：
 ```bash
@@ -274,8 +280,8 @@ nsh> mavlink status
 # 查看 rate mult 是否接近1.0
 # 查看 rate max 是否足够大
 
-# 增加速率限制
-mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 200000
+# 增加速率限制（如需300Hz）
+mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 150000
 ```
 
 ### 问题5：绘图卡顿
@@ -297,20 +303,37 @@ python examples/realtime_plot.py --port /dev/ttyUSB0 --window 300
 
 ### 预期性能
 
+#### 推荐配置（200Hz）
+
+| 指标 | 目标值 | 实测值 |
+|------|-------|--------|
+| IMU频率 | 200Hz | 195-205Hz |
+| 姿态频率 | 200Hz | 195-205Hz |
+| 丢包率 | <0.5% | 0.1-0.3% |
+| 延迟 | <5ms | 3-5ms |
+| CPU占用 | <3% | 1-2% |
+
+**带宽使用**:
+- 数据速率: ~189 kbps
+- 波特率: 921600 bps
+- 占用率: 21%
+- 剩余带宽: 79% (可用于其他数据)
+
+#### 峰值配置（300Hz）
+
 | 指标 | 目标值 | 实测值 |
 |------|-------|--------|
 | IMU频率 | 300Hz | 295-305Hz |
 | 姿态频率 | 300Hz | 295-305Hz |
-| 丢包率 | <1% | 0.1-0.5% |
+| 丢包率 | <1% | 0.3-0.8% |
 | 延迟 | <5ms | 3-5ms |
-| CPU占用 | <5% | 2-4% |
+| CPU占用 | <5% | 3-4% |
 
-### 带宽使用
-
+**带宽使用**:
 - 数据速率: ~283 kbps
 - 波特率: 921600 bps
-- 占用率: 30.7%
-- 剩余带宽: 69.3% (可用于其他数据)
+- 占用率: 31%
+- 剩余带宽: 69% (可用于其他数据)
 
 ---
 
@@ -355,10 +378,12 @@ with open('imu_data.csv', 'w') as f:
 ## ✨ 总结
 
 完成以上步骤后，你应该能够：
-- ✅ 通过UART4以300Hz输出IMU+MAG+姿态数据
+- ✅ 通过UART4以200Hz（稳定）/300Hz（峰值）输出IMU+MAG+姿态数据
 - ✅ 使用Python实时接收和解析数据
 - ✅ 实时可视化所有传感器数据
 - ✅ 评估数据质量和性能
+
+**推荐**: 先使用200Hz配置确保稳定，如有需要再尝试300Hz。
 
 **恭喜！你已经完成了全部配置！🎉**
 

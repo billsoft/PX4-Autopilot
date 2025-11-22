@@ -102,12 +102,12 @@ class FrequencyCalculator:
 class PacketLossDetector:
     """数据包丢失检测器"""
 
-    def __init__(self, expected_interval_ms: float = 3.33):
+    def __init__(self, expected_interval_ms: float = 5.0):
         """
         初始化
 
         参数:
-            expected_interval_ms: 预期时间间隔（毫秒）, 默认3.33ms (300Hz)
+            expected_interval_ms: 预期时间间隔（毫秒）, 默认5.0ms (200Hz)
         """
         self.expected_interval_ms = expected_interval_ms
         self.last_timestamp = None
