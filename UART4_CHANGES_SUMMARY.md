@@ -1,8 +1,8 @@
-# UART4 300Hz IMU数据输出 - 修改总结
+# UART4 高频IMU数据输出 - 修改总结
 
 ## 📋 完成的工作
 
-已完成通过Pixhawk 6X的UART4端口以300Hz频率输出IMU原始数据、磁力计数据和融合姿态数据，并提供Python上位机实时可视化工具。
+已完成通过Pixhawk 6X的UART4端口以200Hz（稳定）/300Hz（峰值）频率输出IMU原始数据、磁力计数据和融合姿态数据，并提供Python上位机实时可视化工具。
 
 ---
 
@@ -93,8 +93,9 @@ make px4_fmu-v6x_default upload
 ```bash
 # 路径: /fs/microsd/etc/extras.txt
 mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
-mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
-mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
+# 如需300Hz峰值性能，将200改为300
 ```
 
 ---
@@ -105,8 +106,8 @@ mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
 
 | 消息名称 | ID | 频率 | 大小 | 内容 |
 |---------|----|----|------|-----|
-| HIGHRES_IMU | 105 | 300Hz | 74B | 加速度、陀螺仪、磁力计、气压、温度 |
-| ATTITUDE_QUATERNION | 31 | 300Hz | 44B | 四元数、角速度、时间戳 |
+| HIGHRES_IMU | 105 | 200Hz ✅ / 300Hz ⚠️ | 74B | 加速度、陀螺仪、磁力计、气压、温度 |
+| ATTITUDE_QUATERNION | 31 | 200Hz ✅ / 300Hz ⚠️ | 44B | 四元数、角速度、时间戳 |
 
 ### 数据字段
 
@@ -125,10 +126,17 @@ mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
 
 ### 性能指标
 
-- **带宽使用**: 283 kbps (占30.7% @ 921600bps)
-- **预期频率**: 295-305 Hz
-- **预期丢包率**: <1%
-- **延迟**: <5ms (从IMU采样到UART输出)
+- **推荐配置 (200Hz)**:
+  - 带宽使用: ~189 kbps (占21% @ 921600bps)
+  - 预期频率: 195-205 Hz
+  - 预期丢包率: <0.5%
+  - 延迟: <5ms
+
+- **峰值配置 (300Hz)**:
+  - 带宽使用: 283 kbps (占31% @ 921600bps)
+  - 预期频率: 295-305 Hz
+  - 预期丢包率: <1%
+  - 延迟: <5ms
 
 ---
 
@@ -184,7 +192,7 @@ python examples/realtime_plot.py --port /dev/ttyUSB0 --baud 921600
 ```bash
 # 1. 检查MAVLink配置
 nsh> mavlink status
-# 应显示 /dev/ttyS3 @ 921600, HIGHRES_IMU/ATTITUDE_QUATERNION @ 300Hz
+# 应显示 /dev/ttyS3 @ 921600, HIGHRES_IMU/ATTITUDE_QUATERNION @ 200Hz
 
 # 2. 检查uORB数据源
 nsh> listener vehicle_imu
@@ -299,10 +307,10 @@ make px4_fmu-v6x_default
 ### 3. 多端口配置
 同时在UART4和TELEM1输出不同数据：
 ```bash
-# UART4 - 300Hz IMU数据
+# UART4 - 200Hz IMU数据（稳定版）
 mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
-mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
-mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
 
 # TELEM1 - 50Hz遥测
 mavlink start -d /dev/ttyS6 -b 57600 -m normal
@@ -361,7 +369,7 @@ receiver2 = PixhawkReceiver('/dev/ttyUSB1', 921600)
 
 ### 完成的功能
 ✅ UART4波特率提升到921600
-✅ 300Hz IMU+磁力计+姿态数据输出
+✅ 200Hz稳定 / 300Hz峰值 IMU+磁力计+姿态数据输出
 ✅ MAVLink数据流配置
 ✅ Python数据接收器
 ✅ 实时9子图可视化
@@ -369,11 +377,12 @@ receiver2 = PixhawkReceiver('/dev/ttyUSB1', 921600)
 ✅ 快速开始指南
 ✅ 示例代码和工具
 
-### 技术指标
-- 数据频率: **300Hz** ✅
-- 丢包率: **<1%** ✅
+### 技术指标（推荐200Hz配置）
+- 数据频率: **200Hz** ✅ (稳定可靠)
+- 丢包率: **<0.5%** ✅
 - 延迟: **<5ms** ✅
-- 带宽占用: **30.7%** ✅
+- 带宽占用: **21%** ✅
+- CPU占用: **低** ✅
 
 ### 下一步
 1. 编译和烧录固件

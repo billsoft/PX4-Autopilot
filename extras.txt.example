@@ -12,7 +12,7 @@
 #   - IMU原始数据（加速度、陀螺仪）
 #   - 磁力计数据
 #   - 融合姿态四元数
-# 频率：300Hz
+# 频率：200Hz（稳定可靠）
 # 波特率：921600
 # 设备：/dev/ttyS3 (UART4 & I2C端口)
 # ============================================
@@ -20,12 +20,12 @@
 # 启动MAVLink在UART4
 mavlink start -d /dev/ttyS3 -b 921600 -m onboard -r 100000
 
-# 配置300Hz数据流
-mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 300
-mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 300
+# 配置200Hz数据流（稳定版）
+mavlink stream -d /dev/ttyS3 -s HIGHRES_IMU -r 200
+mavlink stream -d /dev/ttyS3 -s ATTITUDE_QUATERNION -r 200
 
 # 打印确认消息
-echo "[extras] UART4 MAVLink: 300Hz IMU+MAG+ATT @ 921600bps"
+echo "[extras] UART4 MAVLink: 200Hz IMU+MAG+ATT @ 921600bps"
 
 # ============================================
 # 可选配置（根据需要取消注释）

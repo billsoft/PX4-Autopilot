@@ -48,7 +48,7 @@ class PixhawkReceiver:
         # 统计信息
         self.freq_calc_imu = FrequencyCalculator()
         self.freq_calc_att = FrequencyCalculator()
-        self.packet_loss_detector = PacketLossDetector(expected_interval_ms=3.33)
+        self.packet_loss_detector = PacketLossDetector(expected_interval_ms=5.0)  # 200Hz = 5ms
 
         # 数据计数
         self.imu_count = 0
