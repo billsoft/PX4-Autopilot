@@ -7,7 +7,8 @@
 - **总文档数**: 29 个技术文档
 - **覆盖范围**: 构建系统 → 硬件移植 → RTOS → 驱动开发 → 算法实现 → 接口集成 → 系统架构
 - **适用对象**: PX4 开发者、系统移植工程师、算法工程师
-- **新增**: 快速上手指南（QUICKSTART.md）、构建系统深度教程（build/）
+- **新增**: 快速上手指南（QUICKSTART.md）、构建系统深度教程（build/ 目录 3 个文档）
+- **特别推荐**: `build/nuttx_stm32h7_driver_support.md` - **解答"是否需要自己写驱动"的核心问题**
 
 ---
 
@@ -55,10 +56,12 @@
 | **`QUICKSTART.md`** | ~400 行 | ⭐ **新手必读**：5 分钟试飞、核心架构速查、实战任务、学习路径指引 | - |
 | **`build/build_system_complete_guide.md`** | **~650 行** | ⭐ **构建系统深度剖析**：CMake 流程、工具链配置、NuttX 集成、固件生成、**为何不需要 CubeMX** | `build/nucleo_h743zi_step_by_step.md` |
 | **`build/nucleo_h743zi_step_by_step.md`** | **~800 行** | ⭐ **Nucleo-H743ZI 实战逐步指南**：从零创建板级配置、defconfig 配置、固件烧录、串口验证、MAVLink 连接 | `build/build_system_complete_guide.md` |
+| **`build/nuttx_stm32h7_driver_support.md`** | **~900 行** | ⭐ **NuttX 外设驱动支持详解**：**是否需要自己写驱动？** SPI/I2C/UART 支持现状、与 CubeMX HAL 对比、引脚配置方法 | `build/build_system_complete_guide.md` |
 
 **核心要点**:
 - ✅ **不需要 CubeMX！** PX4 有完整的 CMake 构建系统
 - ✅ **NuttX 已包含 STM32 HAL**：通过 defconfig 配置时钟树和外设
+- ✅ **不需要自己写驱动**：NuttX 已完整实现 STM32H7 的所有外设驱动（详见 `nuttx_stm32h7_driver_support.md`）
 - ✅ **工具链使用 arm-none-eabi-gcc**：自动交叉编译
 - ✅ **Nucleo-H743ZI 关键差异**：8MHz 晶振（非 25MHz），需调整 PLL 配置
 
@@ -162,6 +165,7 @@
 - **新手入门**: `QUICKSTART.md` ⭐ 从这里开始！
 - **构建系统深度**: `build/build_system_complete_guide.md` (CMake、工具链、NuttX 集成)
 - **Nucleo-H743ZI 实战**: `build/nucleo_h743zi_step_by_step.md` (逐步操作指南)
+- **NuttX 外设驱动支持**: `build/nuttx_stm32h7_driver_support.md` ⭐ **是否需要自己写驱动？**
 - **为何不需要 CubeMX**: `build/build_system_complete_guide.md` 第 1 章
 - **工具链配置**: `build/build_system_complete_guide.md` 第 2 章
 - **固件生成过程**: `build/build_system_complete_guide.md` 第 3-4 章
@@ -274,7 +278,8 @@
 ├── QUICKSTART.md (⭐ 新手快速上手指南, 2-4小时)
 ├── build/ (⭐ 构建系统深度教程 - 新增!)
 │   ├── build_system_complete_guide.md (~650 行, 纠正 CubeMX 误区)
-│   └── nucleo_h743zi_step_by_step.md (~800 行, Nucleo-H743ZI 实战)
+│   ├── nucleo_h743zi_step_by_step.md (~800 行, Nucleo-H743ZI 实战)
+│   └── nuttx_stm32h7_driver_support.md (~900 行, NuttX 外设驱动支持详解)
 ├── 通用基础系统/
 │   ├── 开发计划.md
 │   ├── stm32h743_minimal_flight_controller_guide.md (⭐ 26,069 tokens)
@@ -307,4 +312,4 @@
     └── scripts.md
 ```
 
-**总计**: 28 个技术文档（新增 QUICKSTART.md + build/ 目录 2 个文档），覆盖 PX4 全栈开发知识体系。
+**总计**: 29 个技术文档（新增 QUICKSTART.md + build/ 目录 3 个文档），覆盖 PX4 全栈开发知识体系。

@@ -40,6 +40,9 @@ PX4 源码 → 创建板级配置 → CMake 构建 → 烧录到 Nucleo
 2. NuttX 的 defconfig 完全替代了 CubeMX 的时钟树配置
 3. PX4 的 CMake 系统会自动处理所有编译细节
 
+💡 **深入理解**：想知道 NuttX 如何支持 STM32H7 的 SPI/I2C/UART 等外设？
+**→ 请阅读 `nuttx_stm32h7_driver_support.md`** - 详细解释你需要做什么，不需要做什么
+
 ---
 
 ## 📋 前置条件检查
