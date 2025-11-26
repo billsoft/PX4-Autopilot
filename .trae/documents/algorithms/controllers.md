@@ -1,3 +1,14 @@
+---
+文档版本: 1.0
+适用PX4版本: v1.13.x - v1.15.x
+最后更新: 2025-11-26
+文档类型: 算法深度教程
+难度等级: ⭐⭐⭐⭐ (高级)
+前置要求: 控制理论, PID 控制器, 飞行力学基础
+预计学习时间: 10-14 小时
+代码路径: src/modules/mc_pos_control/, src/modules/mc_att_control/, src/modules/fw_att_control/
+---
+
 # PX4 飞行控制器完整教材
 
 ## 第一章：控制系统概述
