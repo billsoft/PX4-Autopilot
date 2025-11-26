@@ -33,6 +33,9 @@ PX4 源码 → 配置板级文件(.px4board) → CMake 构建 → 固件生成
 3. **PX4 的 CMake 系统会自动调用 NuttX 的构建系统**（处理所有底层细节）
 4. **板级配置通过 `.px4board` 文件和 NuttX defconfig**（无需 CubeMX 图形界面）
 
+💡 **如果你还有疑问**："SPI/I2C/UART 驱动是否需要自己写？"，请阅读：
+**→ `nuttx_stm32h7_driver_support.md`** - 详细解释 NuttX 对 STM32H7 的外设支持
+
 ---
 
 ## 目录
