@@ -50,7 +50,7 @@ PX4 源码 → 创建板级配置 → CMake 构建 → 烧录到 Nucleo
 ### 硬件清单
 
 - [ ] ST Nucleo-H743ZI 开发板
-- [ ] USB Type-A 转 Mini-B 数据线（连接 ST-LINK）
+- [ ] USB Type-A 转 Micro‑B 数据线（连接 ST-LINK，CN1）
 - [ ] （可选）USB-TTL 串口模块（用于额外的 UART 调试）
 
 ### 软件清单
@@ -738,12 +738,12 @@ Nucleo-H743ZI 本身没有 IMU、GPS 等传感器。如果你想测试完整的 
 
 | ICM-20948 | Nucleo-H743ZI | Arduino 接口 |
 |-----------|---------------|--------------|
-| VCC       | 3.3V          | CN7-16       |
-| GND       | GND           | CN7-20       |
+| VCC       | 3.3V          | CN8-7        |
+| GND       | GND           | CN7-8        |
 | SCL       | PA5 (SPI1_SCK)  | CN7-10       |
 | SDA/MOSI  | PA7 (SPI1_MOSI) | CN7-14       |
 | AD0/MISO  | PA6 (SPI1_MISO) | CN7-12       |
-| CS        | PD14 (GPIO)     | CN9-10       |
+| CS        | PD14 (GPIO)     | CN7-16       |
 
 **修改配置**:
 
@@ -778,6 +778,49 @@ Nucleo-H743ZI 本身没有 IMU、GPS 等传感器。如果你想测试完整的 
 |----------|---------------|
 | TX       | PB7 (USART1_RX) |
 | RX       | PB6 (USART1_TX) |
+
+### 7.3 外接第二路 IMU 与磁力计（完整接线方案）
+
+**IMU2 (SPI2)**
+
+- 接线：
+  - `SCK → CN7-5 (PB13)`
+  - `MISO → CN12-28 (PB14)` 或 `CN7-19 (PB4)`
+  - `MOSI → CN7-3 (PB15)`
+  - `CS → CN7-7 (PB12)` 或使用 `PD15`（Morpho/Zio GPIO）
+
+**磁力计 (I2C1)**
+
+- 接线：
+  - `SCL → CN7-2 (PB8)`
+  - `SDA → CN7-4 (PB9)`
+  - `VCC → CN8-7 (3.3V)`
+  - `GND → CN7-8 (GND)`
+
+**MAVLink (VCP / USART3)**
+
+- 接线：
+  - `TX → CN11-67 (PD8)`
+  - `RX → CN11-69 (PD9)`
+
+### 7.4 PX4/NuttX 配置建议（使能外设驱动）
+
+- 在 `boards/st/nucleo-h743zi/default.px4board` 中启用：
+  - `CONFIG_MODULES_MAVLINK=y`
+  - `CONFIG_SYSTEMCMDS_UORB=y`
+  - `CONFIG_COMMON_MAGNETOMETER=y`
+  - `CONFIG_DRIVERS_IMU_INVENSENSE_ICM20948=y`
+  - `CONFIG_DRIVERS_GPS=y`
+
+- 在 NuttX `defconfig` 中确认/启用：
+  - `CONFIG_STM32H7_SPI1=y`、`CONFIG_STM32H7_SPI2=y`
+  - `CONFIG_STM32H7_I2C1=y`
+  - `CONFIG_STM32H7_USART3=y`（VCP）以及可选 `CONFIG_STM32H7_USART1=y`
+  - `CONFIG_FS_ROMFS=y`
+
+### 7.5 参考 pin 映射文档
+
+- 详见 `nucleo_h743zi_pinmap.md` 的 “CN 快速索引（精选）” 部分，包含 CN7/10/11/12 关键引脚的编号与 MCU 引脚对应关系。
 
 ---
 
