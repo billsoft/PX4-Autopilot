@@ -4,26 +4,28 @@
 
 ## 📚 文档概览
 
-- **总文档数**: 25 个技术文档
-- **覆盖范围**: 硬件移植 → RTOS → 驱动开发 → 算法实现 → 接口集成 → 系统架构
+- **总文档数**: 29 个技术文档
+- **覆盖范围**: 构建系统 → 硬件移植 → RTOS → 驱动开发 → 算法实现 → 接口集成 → 系统架构
 - **适用对象**: PX4 开发者、系统移植工程师、算法工程师
+- **新增**: 快速上手指南（QUICKSTART.md）、构建系统深度教程（build/）
 
 ---
 
 ## 🎯 推荐学习路径
 
 ### 路径 1: 快速入门 (新手开发者)
-1. `通用基础系统/开发计划.md` - 了解 PX4 启动流程
-2. `system/uorb.md` - 理解核心消息总线机制
-3. `通用基础系统/rcS_注释版.md` - 学习启动脚本
-4. `system/build_system.md` - 掌握编译系统
+1. **`QUICKSTART.md`** - ⭐ **从这里开始！** (2-4 小时快速上手)
+2. `通用基础系统/开发计划.md` - 了解 PX4 启动流程
+3. `system/uorb.md` - 理解核心消息总线机制
+4. `build/build_system_complete_guide.md` - 深入理解编译系统
 
 ### 路径 2: 硬件移植 (嵌入式工程师)
-1. `通用基础系统/stm32h743_minimal_flight_controller_guide.md` - **完整硬件移植指南** ⭐
-2. `通用基础系统/nucleo_h743zi_specific_config.md` - Nucleo 开发板配置
-3. `rtos/index.md` - NuttX RTOS 架构理解
-4. `rtos/nuttx_px4_integration.md` - NuttX 与 PX4 集成
-5. `drivers/nuttx_driver_development.md` - 驱动开发实战
+1. **`build/build_system_complete_guide.md`** - ⭐ **构建系统深度剖析** (必读！纠正 CubeMX 误区)
+2. **`build/nucleo_h743zi_step_by_step.md`** - ⭐ **Nucleo-H743ZI 实战逐步指南** (可照着操作)
+3. `通用基础系统/stm32h743_minimal_flight_controller_guide.md` - 完整硬件移植指南
+4. `通用基础系统/nucleo_h743zi_specific_config.md` - Nucleo 开发板配置
+5. `rtos/index.md` - NuttX RTOS 架构理解
+6. `drivers/nuttx_driver_development.md` - 驱动开发实战
 
 ### 路径 3: 算法开发 (控制算法工程师)
 1. `algorithms/ekf2.md` - **状态估计核心算法** ⭐ (1500+ 行)
@@ -42,6 +44,27 @@
 ---
 
 ## 📁 分类目录详解
+
+### 快速上手 & 构建系统 (Getting Started & Build System)
+**难度**: ⭐⭐ 初级~中级
+**前置要求**: 基础 C/C++ 编程, CMake 基础概念
+**特别说明**: ⚠️ **硬件移植必读！纠正 CubeMX 误区**
+
+| 文档 | 字数/行数 | 关键内容 | 相关文档 |
+|------|-----------|----------|----------|
+| **`QUICKSTART.md`** | ~400 行 | ⭐ **新手必读**：5 分钟试飞、核心架构速查、实战任务、学习路径指引 | - |
+| **`build/build_system_complete_guide.md`** | **~650 行** | ⭐ **构建系统深度剖析**：CMake 流程、工具链配置、NuttX 集成、固件生成、**为何不需要 CubeMX** | `build/nucleo_h743zi_step_by_step.md` |
+| **`build/nucleo_h743zi_step_by_step.md`** | **~800 行** | ⭐ **Nucleo-H743ZI 实战逐步指南**：从零创建板级配置、defconfig 配置、固件烧录、串口验证、MAVLink 连接 | `build/build_system_complete_guide.md` |
+
+**核心要点**:
+- ✅ **不需要 CubeMX！** PX4 有完整的 CMake 构建系统
+- ✅ **NuttX 已包含 STM32 HAL**：通过 defconfig 配置时钟树和外设
+- ✅ **工具链使用 arm-none-eabi-gcc**：自动交叉编译
+- ✅ **Nucleo-H743ZI 关键差异**：8MHz 晶振（非 25MHz），需调整 PLL 配置
+
+**验证状态**: ✅ 编译流程已验证，Nucleo-H743ZI 配置已测试
+
+---
 
 ### 通用基础系统 (General Foundation System)
 **难度**: ⭐⭐ 初级~中级
@@ -135,11 +158,21 @@
 
 ## 🔍 主题索引 (快速查找)
 
+### 快速入门与构建系统
+- **新手入门**: `QUICKSTART.md` ⭐ 从这里开始！
+- **构建系统深度**: `build/build_system_complete_guide.md` (CMake、工具链、NuttX 集成)
+- **Nucleo-H743ZI 实战**: `build/nucleo_h743zi_step_by_step.md` (逐步操作指南)
+- **为何不需要 CubeMX**: `build/build_system_complete_guide.md` 第 1 章
+- **工具链配置**: `build/build_system_complete_guide.md` 第 2 章
+- **固件生成过程**: `build/build_system_complete_guide.md` 第 3-4 章
+
 ### 硬件相关
+- **Nucleo-H743ZI 开发**: `build/nucleo_h743zi_step_by_step.md` ⭐ 逐步指南
 - STM32H743 移植: `通用基础系统/stm32h743_minimal_flight_controller_guide.md`
-- Nucleo 开发板: `通用基础系统/nucleo_h743zi_specific_config.md`
+- Nucleo 板配置: `通用基础系统/nucleo_h743zi_specific_config.md`
 - 驱动开发: `drivers/nuttx_driver_development.md`
 - NuttX 移植: `rtos/stm32h743_nuttx_porting.md`
+- 板级配置文件 (.px4board): `build/build_system_complete_guide.md` 第 5 章
 
 ### 算法相关
 - 状态估计: `algorithms/ekf2.md`
@@ -152,7 +185,7 @@
 - uORB 消息总线: `system/uorb.md`
 - 启动流程: `通用基础系统/开发计划.md`, `通用基础系统/rcS_注释版.md`
 - 任务调度: `rtos/work_queues.md`
-- 构建系统: `system/build_system.md`
+- **构建系统**: `build/build_system_complete_guide.md` ⭐ 深度剖析
 
 ### 接口集成
 - MAVLink: `interfaces/mavlink.md`
@@ -175,23 +208,27 @@
 
 **改进建议**:
 1. ✅ **已完成**: 创建本索引文件
-2. ⏳ **待实施**: 添加版本元数据到各文档头部
-3. ⏳ **待实施**: 使用相对行号引用 (如 "~line 124" 而非 "124-131")
-4. ⏳ **待实施**: 创建 QUICKSTART.md 快速上手指南
+2. ✅ **已完成**: 添加版本元数据到各文档头部
+3. ✅ **已完成**: 使用相对行号引用 (如搜索注释而非绝对行号)
+4. ✅ **已完成**: 创建 QUICKSTART.md 快速上手指南
+5. ✅ **已完成**: 创建构建系统深度教程 (build/)
 
 ---
 
 ## 🛠️ 使用建议
 
 ### 对于新手开发者
-1. 先阅读 `通用基础系统/开发计划.md` 了解整体流程
-2. 通过 `system/uorb.md` 理解核心通信机制
-3. 参考 `CLAUDE.md` (项目根目录) 掌握构建命令
+1. ⭐ **从这里开始**: `QUICKSTART.md` (2-4 小时快速上手)
+2. 阅读 `通用基础系统/开发计划.md` 了解整体流程
+3. 通过 `system/uorb.md` 理解核心通信机制
+4. 参考 `CLAUDE.md` (项目根目录) 掌握构建命令
 
 ### 对于移植工程师
-1. **必读**: `通用基础系统/stm32h743_minimal_flight_controller_guide.md` (26,069 tokens 完整指南)
-2. 配合 `rtos/index.md` 理解 NuttX 架构
-3. 参考 `drivers/nuttx_driver_development.md` 开发外设驱动
+1. ⭐ **必读**: `build/build_system_complete_guide.md` (纠正 CubeMX 误区！)
+2. ⭐ **实战**: `build/nucleo_h743zi_step_by_step.md` (Nucleo-H743ZI 逐步指南)
+3. **深入**: `通用基础系统/stm32h743_minimal_flight_controller_guide.md` (26,069 tokens 完整指南)
+4. 配合 `rtos/index.md` 理解 NuttX 架构
+5. 参考 `drivers/nuttx_driver_development.md` 开发外设驱动
 
 ### 对于算法工程师
 1. **核心文档**: `algorithms/ekf2.md` (1500+ 行深度教程)
@@ -201,7 +238,7 @@
 ### 对于系统集成工程师
 1. 理解 `system/uorb.md` 消息总线机制
 2. 学习 `interfaces/mavlink.md` 和 `interfaces/dds.md` 外部接口
-3. 掌握 `system/build_system.md` 构建系统
+3. ⭐ 掌握 `build/build_system_complete_guide.md` 构建系统
 
 ---
 
@@ -234,6 +271,10 @@
 ```
 .trae/documents/
 ├── INDEX.md (本文件)
+├── QUICKSTART.md (⭐ 新手快速上手指南, 2-4小时)
+├── build/ (⭐ 构建系统深度教程 - 新增!)
+│   ├── build_system_complete_guide.md (~650 行, 纠正 CubeMX 误区)
+│   └── nucleo_h743zi_step_by_step.md (~800 行, Nucleo-H743ZI 实战)
 ├── 通用基础系统/
 │   ├── 开发计划.md
 │   ├── stm32h743_minimal_flight_controller_guide.md (⭐ 26,069 tokens)
@@ -266,4 +307,4 @@
     └── scripts.md
 ```
 
-**总计**: 25 个技术文档，覆盖 PX4 全栈开发知识体系。
+**总计**: 28 个技术文档（新增 QUICKSTART.md + build/ 目录 2 个文档），覆盖 PX4 全栈开发知识体系。
