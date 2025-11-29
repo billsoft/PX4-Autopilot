@@ -1,0 +1,12 @@
+#!/bin/sh
+icm42688p start -s -b 1 -R 0 -6
+icm42688p start -s -b 3 -R 8 -6
+usleep 100000
+bmm150 start -I -b 1 -R 0
+usleep 50000
+cmos_sync start
+dual_imu_fusion start
+sensors start
+mavlink stream -u -r 120 -s ATTITUDE_QUATERNION
+mavlink stream -u -r 120 -s HIGHRES_IMU
+mavlink stream -u -r 50 -s ATTITUDE

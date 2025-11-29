@@ -41,6 +41,7 @@ px4_add_module(
 		bmm150_main.cpp
 		Bosch_BMM150_registers.hpp
 	DEPENDS
+		drivers__device
 		drivers_magnetometer
 		px4_work_queue
 	)

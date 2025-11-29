@@ -15,7 +15,15 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(tree:*)",
-      "WebFetch(domain:www.eeworld.com.cn)"
+      "WebFetch(domain:www.eeworld.com.cn)",
+      "Bash(tee:*)",
+      "Bash(find:*)",
+      "Bash(wsl bash:*)",
+      "Bash(git checkout:*)",
+      "Bash(dir /s /b boardsstnucleo-h743zi-fc*.h 2)",
+      "Bash(nul)",
+      "Bash(git rm:*)",
+      "Bash(del .traedocumentsbuildcompilation_error_fix_report.md)"
     ],
     "deny": [],
     "ask": []

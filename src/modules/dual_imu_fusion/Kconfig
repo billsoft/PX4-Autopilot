@@ -1,0 +1,3 @@
+menuconfig MODULES_DUAL_IMU_FUSION
+	bool "dual_imu_fusion"
+	default n
