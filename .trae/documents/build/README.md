@@ -94,25 +94,7 @@
 
 ### 开发计划文档
 
-#### 6. [nucleo_h743zi_minimal_flight_controller_dev_plan.md](nucleo_h743zi_minimal_flight_controller_dev_plan.md)
-**状态**: ⚠️ 需要更新
-**用途**: 阶段1-3开发计划
-- 硬件准备
-- 板级移植
-- 传感器驱动集成
-
-**当前进度**: 阶段2已完成(板级移植成功)
-
----
-
-#### 7. [nucleo_h743zi_fc_dev_plan_stages_4_to_8.md](nucleo_h743zi_fc_dev_plan_stages_4_to_8.md)
-**状态**: ⚠️ 可能不适用最小系统
-**用途**: 阶段4-8开发计划(完整飞控功能)
-- EKF2融合(❌ 您使用自定义融合)
-- 飞行控制(❌ 不需要)
-- 导航和任务(❌ 不需要)
-
-**注意**: 本文档面向完整飞控,与当前最小系统目标不符
+当前采用最小系统迭代开发，原计划类文档已清理；以本 README 索引与保留技术文档为准。
 
 ---
 
@@ -120,7 +102,7 @@
 
 ### 新手快速上手
 1. 阅读 [px4_custom_board_complete_guide.md](px4_custom_board_complete_guide.md)
-2. 参考 [nanopix4pin.md](nanopix4pin.md) 确认硬件
+2. 参考 [nucleo_h743zi_pinmap.md](nucleo_h743zi_pinmap.md) 确认硬件
 3. 查阅 [nuttx_stm32h7_driver_support.md](nuttx_stm32h7_driver_support.md) 了解驱动支持
 
 ### 遇到编译错误

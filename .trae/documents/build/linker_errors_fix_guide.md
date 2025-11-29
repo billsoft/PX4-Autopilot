@@ -1,7 +1,7 @@
 # 链接错误修复完整指南 - Nucleo-H743ZI-FC
 
 **创建日期**: 2025-11-28
-**状态**: ✅ 所有链接错误修复方案已实施
+**状态**: ✅ 所有链接错误修复方案已实施（更新：与HRT配置指南一致）
 **编译进度**: [532/535] → 目标 [535/535]
 
 ---
@@ -146,25 +146,22 @@ static constexpr bool unused = validateSPIConfig(px4_spi_buses);
 - 虽然已添加 `CONFIG_STM32H7_TIM5=y`，但HRT还需要平台层初始化
 - 缺少HRT平台实现
 
-**修复方案**:
+**修复方案**（与HRT指南保持一致）：
 
-1. **验证defconfig中定时器配置**:
+1. **验证 board_config.h 中的 HRT 宏**：
+在 `boards/st/nucleo-h743zi-fc/src/board_config.h` 定义：
+```c
+#define HRT_TIMER 5
+#define HRT_TIMER_CHANNEL 1
+```
+
+2. **defconfig 中确保计时框架支持但不启用 TIM5 驱动**：
+在 `boards/st/nucleo-h743zi-fc/nuttx-config/nsh/defconfig`：
 ```kconfig
 # Timer Configuration (Required for HRT - High Resolution Timer)
-CONFIG_STM32H7_TIM5=y
-```
-✅ 已添加
-
-2. **检查NuttX HRT配置**:
-在NuttX中，HRT需要以下配置（通常在arch层自动处理）：
-- `CONFIG_TIMER`: 通用定时器支持
-- HRT使用TIM5作为1MHz微秒定时器
-
-**可能需要添加的配置** (在 defconfig):
-```kconfig
 CONFIG_TIMER=y
-CONFIG_STM32H7_TIM5=y
-CONFIG_ONESHOT=y  # HRT需要单次触发模式
+CONFIG_ONESHOT=y
+# ⚠️ 不启用 CONFIG_STM32H7_TIM5=y（由 PX4 HRT 直接控制 TIM5）
 ```
 
 ---
@@ -180,13 +177,13 @@ CONFIG_ONESHOT=y  # HRT需要单次触发模式
 - 检查SPI总线定义是否完整
 - 确认CS引脚配置正确（PD14, PB12）
 
-### 第3步: 完善 defconfig HRT配置 ⏳ 需要添加
-在 `nuttx-config/nsh/defconfig` 中添加:
+### 第3步: 完善 defconfig HRT配置（修正 TIM5 冲突）
+在 `boards/st/nucleo-h743zi-fc/nuttx-config/nsh/defconfig` 中：
 ```kconfig
 # Timer and HRT support
 CONFIG_TIMER=y
-CONFIG_STM32H7_TIM5=y
 CONFIG_ONESHOT=y
+# 不启用 CONFIG_STM32H7_TIM5=y
 ```
 
 ### 第4步: 重新编译验证

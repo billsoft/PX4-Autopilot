@@ -84,7 +84,7 @@ NuttX 对 STM32H743 的支持**非常完善**，以下外设都有**现成的驱
 
 **方法**：编辑 NuttX 的 defconfig 文件
 
-**位置**：`platforms/nuttx/NuttX/nuttx/boards/arm/stm32h7/nucleo-h743zi/configs/nsh/defconfig`
+**位置**：`boards/st/nucleo-h743zi-fc/nuttx-config/nsh/defconfig`（自定义板目录，避免修改子模块）
 
 #### 示例 1：启用 SPI1（用于连接 IMU）
 
@@ -146,7 +146,7 @@ CONFIG_USART3_TXDMA=y           # 发送 DMA
 
 #### 你需要写的代码（在板级初始化文件中）
 
-**文件位置**：`platforms/nuttx/NuttX/nuttx/boards/arm/stm32h7/nucleo-h743zi/src/stm32_spi.c`
+**文件位置**：`boards/st/nucleo-h743zi-fc/src/stm32_spi.c`
 
 ```c
 /**
@@ -178,8 +178,8 @@ void stm32_spidev_initialize(void)
     /* 配置 SPI1 引脚 */
     /* NuttX 会自动配置 SCK/MISO/MOSI，我们只需要配置片选（CS）*/
 
-    /* 配置 IMU 的片选引脚（假设 ICM-20948 连接到 PD14）*/
-    stm32_configgpio(GPIO_SPI1_CS_ICM20948);
+    /* 配置 IMU 的片选引脚（ICM-42686/45686 驱动）*/
+    stm32_configgpio(GPIO_SPI1_CS_ICM42688P);
 
     /* 初始时拉高（未选中）*/
     stm32_gpiowrite(GPIO_SPI1_CS_ICM20948, true);
@@ -193,7 +193,7 @@ void stm32_spi1select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
     switch (devid) {
     case SPIDEV_IMU(0):  /* IMU 传感器 */
-        stm32_gpiowrite(GPIO_SPI1_CS_ICM20948, !selected);
+        stm32_gpiowrite(GPIO_SPI1_CS_ICM42688P, !selected);
         break;
     }
 }
