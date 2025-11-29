@@ -71,12 +71,12 @@ extern "C" int icm42688p_main(int argc, char *argv[])
 # -C: 校准参数标识符（可选）
 icm42688p start -s -b 1 -R 0 -C 1
 
-# ========== 启动IMU2（SPI2，反面安装）==========
+# ========== 启动IMU2（SPI3，反面安装）========== ⚠️ 使用SPI3避免以太网冲突
 # -s: SPI模式
-# -b 2: SPI总线2 (对应/dev/spi2)
+# -b 3: SPI总线3 (对应/dev/spi3) ⚠️ 改用SPI3总线
 # -R 8: 旋转180度（ROTATION_ROLL_180，值为8）
 # -C: 校准参数标识符
-icm42688p start -s -b 2 -R 8 -C 2
+icm42688p start -s -b 3 -R 8 -C 2
 
 # ========== 等待IMU初始化完成 ==========
 # 等待100ms确保传感器完全启动

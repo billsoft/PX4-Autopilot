@@ -34,7 +34,7 @@ q---
 |---------|---------|---------|------------|
 | **实时操作系统** | NuttX RTOS v10.3+ | - | `platforms/nuttx/NuttX/nuttx/` |
 | **消息总线** | uORB | - | `platforms/common/uORB/` |
-| **双路IMU** | 2× ICM-42688-P（正反安装） | SPI1 + SPI2 | `src/drivers/imu/invensense/icm42688p/` |
+| **双路IMU** | 2× ICM-42688-P（正反安装） | SPI1 + SPI3 | `src/drivers/imu/invensense/icm42688p/` |
 | **磁力计** | BMM150（推荐）或 IST8310 | I2C1 | `src/drivers/magnetometer/bosch/bmm150/` |
 | **简化融合算法** | 正反IMU降噪 + 磁力计融合 | 自定义模块 | 新建 `src/modules/dual_imu_fusion/` |
 | **数据输出** | MAVLink协议 | USART3 (ST-LINK VCP) | `src/modules/mavlink/` |
@@ -63,7 +63,7 @@ q---
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
 │  │ IMU1 (正) │  │ IMU2 (反) │  │ 磁力计   │  │ UART3    │   │
 │  │ ICM-42688P│  │ ICM-42688P│  │ BMM150   │  │ ST-LINK  │   │
-│  │ SPI1      │  │ SPI2      │  │ I2C1     │  │ VCP      │   │
+│  │ SPI1      │  │ SPI3      │  │ I2C1     │  │ VCP      │   │
 │  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘   │
 │        │             │             │             │          │
 ├────────┼─────────────┼─────────────┼─────────────┼─────────┤
@@ -79,7 +79,7 @@ q---
 │  ┌─────▼────┐  ┌─────▼────┐  ┌─────▼────┐  ┌─────▼────┐   │
 │  │ICM42688P │  │ICM42688P │  │  BMM150  │  │ MAVLink  │   │
 │  │  Driver  │  │  Driver  │  │  Driver  │  │  Module  │   │
-│  │(/dev/spi1)│  │(/dev/spi2)│  │(/dev/i2c1)│  │(/dev/ttyS2)│ │
+│  │(/dev/spi1)│  │(/dev/spi3)│  │(/dev/i2c1)│  │(/dev/ttyS2)│ │
 │  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘   │
 ├────────┼─────────────┼─────────────┼─────────────┼─────────┤
 │  uORB 消息总线                                               │
@@ -123,7 +123,7 @@ q---
 | GND            | CN7-8       | GND     | - |
 | SCK            | CN7-10 (D13)| PA5     | `GPIO_SPI1_SCK` (NuttX自动配置) |
 | MISO           | CN7-12 (D12)| PA6     | `GPIO_SPI1_MISO` (NuttX自动配置) |
-| MOSI           | CN7-14 (D11)| PA7     | `GPIO_SPI1_MOSI` (NuttX自动配置) |
+| MOSI           | CN7-13 (D22)| **PB5** | `GPIO_SPI1_MOSI` (NuttX自动配置) ⚠️ **改用PB5避免以太网冲突** |
 | CS             | CN7-16 (D10)| PD14    | `GPIO_SPI1_CS_ICM42688P` (需定义) |
 
 **CS片选GPIO定义格式**（参考 `boards/px4/fmu-v6x/src/board_config.h:line 96`）：
@@ -132,20 +132,24 @@ q---
                                   GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN14)
 ```
 
-### IMU2（反面安装，SPI2）
+⚠️ **重要变更**: 原计划使用PA7作为SPI1_MOSI，但PA7与以太网RMII_CRS_DV冲突（JP6）。改用**PB5**（复用功能）避免冲突。
+
+### IMU2（反面安装，SPI3）⚠️ **已从SPI2改为SPI3避免以太网冲突**
 
 | ICM-42688-P引脚 | Nucleo连接器 | MCU引脚 | GPIO宏定义 |
 |----------------|-------------|---------|----------|
 | VCC            | CN8-7       | 3.3V    | - |
 | GND            | CN7-8       | GND     | - |
-| SCK            | CN7-5       | PB13    | `GPIO_SPI2_SCK` (NuttX自动配置) |
-| MISO           | CN12-28     | PB14    | `GPIO_SPI2_MISO` (NuttX自动配置) |
-| MOSI           | CN7-3       | PB15    | `GPIO_SPI2_MOSI` (NuttX自动配置) |
-| CS             | CN7-7       | PB12    | `GPIO_SPI2_CS_ICM42688P` (需定义) |
+| SCK            | CN7-15 (D23)| **PB3** | `GPIO_SPI3_SCK` (NuttX自动配置) |
+| MISO           | CN7-19 (D25)| **PB4** | `GPIO_SPI3_MISO` (NuttX自动配置) |
+| MOSI           | CN7-13 (D22)| **PB5** | `GPIO_SPI3_MOSI` (NuttX自动配置，与SPI1共享同一引脚) |
+| CS             | CN7-17 (D24)| **PA4** | `GPIO_SPI3_CS_ICM42688P` (需定义) |
 
 **注意事项**：
+- ⚠️ **原SPI2方案冲突**：PB13与以太网RMII_TXD1冲突（SB118），改用**SPI3总线**
 - IMU2物理上需要反向安装（芯片朝向与IMU1相反180度）
-- 驱动启动时需指定 `-R 4` 参数（对应180度旋转）
+- 驱动启动时需指定 `-R 8` 参数（对应ROTATION_ROLL_180，值为8）
+- **PB5同时用于SPI1和SPI3的MOSI**：合法配置，通过片选CS区分设备
 
 ### 磁力计（I2C1）
 
@@ -333,14 +337,15 @@ CONFIG_SYSTEMCMDS_VER=y                # 版本信息
 #define GPIO_SPI1_CS_ICM42688P  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz| \
                                   GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN14)
 
-/* ========== SPI2 设备定义（IMU2 - 反面安装）========== */
+/* ========== SPI3 设备定义（IMU2 - 反面安装）========== */
+/* ⚠️ 改用SPI3避免SPI2与以太网RMII的引脚冲突 */
 
-/* SPI2总线编号（对应/dev/spi2）*/
-#define PX4_SPI_BUS_SENSORS2  2
+/* SPI3总线编号（对应/dev/spi3）*/
+#define PX4_SPI_BUS_SENSORS2  3
 
-/* IMU2片选引脚：PB12 (Zio D19) */
-#define GPIO_SPI2_CS_ICM42688P  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz| \
-                                  GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN12)
+/* IMU2片选引脚：PA4 (Zio D24, SPI_B_NSS) */
+#define GPIO_SPI3_CS_ICM42688P  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz| \
+                                  GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
 
 /* ========== I2C 总线定义 ========== */
 
@@ -496,7 +501,7 @@ CONFIG_STM32H7_PLLCFG_PLLR=2
 
 # ========== SPI外设配置（双路IMU）==========
 CONFIG_STM32H7_SPI1=y                   # 启用SPI1（IMU1）
-CONFIG_STM32H7_SPI2=y                   # 启用SPI2（IMU2）
+CONFIG_STM32H7_SPI3=y                   # 启用SPI3（IMU2）
 CONFIG_SPI=y                            # 启用NuttX SPI框架
 CONFIG_SPI_EXCHANGE=y                   # 启用全双工传输
 CONFIG_SPI_DRIVER=y                     # 创建/dev/spi设备节点
@@ -506,10 +511,10 @@ CONFIG_STM32H7_DMA1=y                   # 启用DMA1控制器
 CONFIG_STM32H7_DMA2=y                   # 启用DMA2控制器
 CONFIG_SPI_DMA=y                        # SPI使用DMA传输
 CONFIG_SPI1_DMA=y                       # SPI1启用DMA
-CONFIG_SPI2_DMA=y                       # SPI2启用DMA
+CONFIG_SPI3_DMA=y                       # SPI3启用DMA
 
 # SPI时钟配置
-# SPI1/2在APB2上，APB2频率=HCLK/2=240MHz
+# SPI1/3在APB2上，APB2频率=HCLK/2=240MHz
 # SPI最大频率=APB2/2=120MHz（实际使用时会根据传感器需求降速）
 
 # ========== I2C外设配置（磁力计）==========
@@ -626,7 +631,7 @@ cat .config | grep -E "SPI|I2C|USART"
 **预期输出示例**：
 ```makefile
 CONFIG_STM32H7_SPI1=y
-CONFIG_STM32H7_SPI2=y
+CONFIG_STM32H7_SPI3=y
 CONFIG_STM32H7_I2C1=y
 CONFIG_STM32H7_USART3=y
 CONFIG_USART3_SERIAL_CONSOLE=y
@@ -703,12 +708,12 @@ __EXPORT void board_control_spi_sensors_power(bool enable)
     if (enable) {
         /* 拉高片选（未选中状态）*/
         px4_arch_gpiowrite(GPIO_SPI1_CS_ICM42688P, true);
-        px4_arch_gpiowrite(GPIO_SPI2_CS_ICM42688P, true);
+        px4_arch_gpiowrite(GPIO_SPI3_CS_ICM42688P, true);
         usleep(10000);  /* 等待10ms传感器上电 */
     } else {
         /* 拉低片选（强制传感器进入复位状态）*/
         px4_arch_gpiowrite(GPIO_SPI1_CS_ICM42688P, false);
-        px4_arch_gpiowrite(GPIO_SPI2_CS_ICM42688P, false);
+        px4_arch_gpiowrite(GPIO_SPI3_CS_ICM42688P, false);
     }
 }
 
@@ -746,9 +751,9 @@ __EXPORT int board_app_initialize(uintptr_t arg)
     px4_arch_configgpio(GPIO_SPI1_CS_ICM42688P);
     px4_arch_gpiowrite(GPIO_SPI1_CS_ICM42688P, true);  /* 拉高（未选中）*/
 
-    /* IMU2片选（SPI2）*/
-    px4_arch_configgpio(GPIO_SPI2_CS_ICM42688P);
-    px4_arch_gpiowrite(GPIO_SPI2_CS_ICM42688P, true);  /* 拉高（未选中）*/
+    /* IMU2片选（SPI3）*/
+    px4_arch_configgpio(GPIO_SPI3_CS_ICM42688P);
+    px4_arch_gpiowrite(GPIO_SPI3_CS_ICM42688P, true);  /* 拉高（未选中）*/
 
     /* ========== 3. LED启动指示序列 ========== */
     /* 绿色LED闪烁3次表示板级初始化成功 */
@@ -812,12 +817,13 @@ constexpr px4_spi_bus_all_hw_t px4_spi_buses_all_hw[BOARD_NUM_SPI_CFG_HW_VERSION
             ),
         }),
 
-        /* ========== SPI2总线：IMU2（反面安装）========== */
-        initSPIBus(SPI::Bus::SPI2, {
+        /* ========== SPI3总线：IMU2（反面安装）========== */
+        /* ⚠️ 改用SPI3避免SPI2（PB13）与以太网RMII_TXD1的引脚冲突 */
+        initSPIBus(SPI::Bus::SPI3, {
             /* ICM-42688-P (实例1，旋转180度) */
             initSPIDevice(DRV_IMU_DEVTYPE_ICM42688P,
-                         SPI::CS{GPIO::PortB, GPIO::Pin12},  /* 片选：PB12 */
-                         SPI::DRDY{GPIO::PortB, GPIO::Pin13}  /* DRDY（可选）：PB13 */
+                         SPI::CS{GPIO::PortA, GPIO::Pin4},   /* 片选：PA4 (D24) */
+                         SPI::DRDY{GPIO::PortB, GPIO::Pin0}  /* DRDY（可选）：PB0 或其他空闲GPIO */
             ),
         }),
     }),
@@ -829,7 +835,7 @@ constexpr px4_spi_bus_all_hw_t px4_spi_buses_all_hw[BOARD_NUM_SPI_CFG_HW_VERSION
  */
 static constexpr px4_spi_bus_t px4_spi_buses[BOARD_NUM_SPI_CFG_HW_VERSIONS] = {
     initSPIBus(SPI::Bus::SPI1, {}),
-    initSPIBus(SPI::Bus::SPI2, {}),
+    initSPIBus(SPI::Bus::SPI3, {}),  /* ⚠️ 使用SPI3替代SPI2 */
 };
 ```
 

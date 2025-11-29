@@ -1,0 +1,16 @@
+#!/bin/sh
+set R /
+set FEXTRAS /fs/microsd/etc/extras.txt
+ver all
+dataman start
+sh /etc/init.d/rc.board_sensors
+mavlink start -d /dev/ttyS2 -b 115200 -m onboard -r 100000
+mavlink stream -d /dev/ttyS2 -s HIGHRES_IMU -r 50
+mavlink stream -d /dev/ttyS2 -s SYS_STATUS -r 5
+mavlink stream -d /dev/ttyS2 -s HEARTBEAT -r 1
+dual_imu_fusion start
+if [ -f $FEXTRAS ]
+then
+    sh $FEXTRAS
+fi
+echo "Nucleo-H743ZI-FC startup complete"

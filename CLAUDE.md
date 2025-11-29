@@ -12,11 +12,8 @@ Build syntax: `make [VENDOR_MODEL_VARIANT] [target]`
 
 **Common SITL builds:**
 ```bash
-make px4_sitl_default              # Build SITL (default target)
-make px4_sitl gz_x500              # Build and launch Gazebo with X500 quadrotor
-make px4_sitl gz_standard_vtol     # VTOL simulation
-make px4_sitl gz_rc_cessna         # Fixed-wing simulation
-HEADLESS=1 make px4_sitl gz_x500   # Gazebo headless (no GUI)
+wsl bash -lc 'cd /mnt/d/code/px4/PX4-Autopilot && make st_nucleo-h743zi-fc_default -j$(nproc)'
+不要自动构建，需要构建时提示用户手动构建 反馈给claude日志，因为claude 自动构建等待时间非常长，可能超时也影响客户继续使用clude code
 ```
 
 **Hardware builds:**
@@ -303,3 +300,104 @@ Format: `boards/VENDOR/MODEL/VARIANT.px4board`
 - Refactor existing code rather than creating duplicate replacement files
 - If a file becomes too large or complex, use design patterns to split it appropriately
 - Maintain the existing architecture and file structure whenever possible
+
+## Custom Development (This Fork)
+
+This fork focuses on **Nucleo-H743ZI flight controller development** with extensive Chinese documentation.
+
+### Custom Board: ST Nucleo-H743ZI-FC
+
+**Board configuration**: `boards/st/nucleo-h743zi-fc/default.px4board`
+
+Key differences from standard PX4:
+- **8MHz HSE crystal** (not 25MHz) - requires PLL reconfiguration
+- **Custom module**: `dual_imu_fusion` for multi-IMU sensor fusion
+- **Minimal configuration**: Core modules only (no EKF2, no navigator, no control by default)
+- **Enabled modules**: dataman, logger, mavlink, sensors, dual_imu_fusion
+- **Sensors**: ICM42688P IMU, BMM150 magnetometer
+
+**Build commands**:
+```bash
+make st_nucleo-h743zi-fc_default           # Build for Nucleo board
+make st_nucleo-h743zi-fc_default upload    # Flash to board
+make list_config_targets | grep nucleo     # List all Nucleo targets
+```
+
+### Extensive Technical Documentation
+
+**Location**: `.trae/documents/` (29 technical documents, mostly in Chinese)
+
+**Quick Start**: Read `.trae/documents/QUICKSTART.md` for rapid onboarding (2-4 hours)
+
+**Master Index**: `.trae/documents/INDEX.md` provides complete navigation
+
+**Key documentation areas**:
+- `build/build_system_complete_guide.md` - Why PX4 doesn't need CubeMX, CMake workflow
+- `build/nucleo_h743zi_step_by_step.md` - Step-by-step Nucleo board bring-up
+- `build/nuttx_stm32h7_driver_support.md` - NuttX driver support analysis (answers "Do I need to write drivers?")
+- `通用基础系统/stm32h743_minimal_flight_controller_guide.md` - Complete STM32H743 porting guide (26k+ tokens)
+- `rtos/` - NuttX RTOS integration and optimization
+- `algorithms/` - EKF2, controllers, TECS algorithms deep dive
+- `drivers/nuttx_driver_development.md` - Driver development guide (2884 lines)
+
+**Learning paths** (see INDEX.md for details):
+1. **Quick Start**: QUICKSTART.md → core concepts → SITL practice
+2. **Hardware Porting**: build_system_complete_guide.md → nucleo_h743zi_step_by_step.md → driver development
+3. **Algorithm Development**: EKF2 → controllers → TECS
+4. **System Integration**: uORB → MAVLink → ROS 2/DDS
+
+### Custom Modules
+
+**Dual IMU Fusion** (`src/modules/dual_imu_fusion/`)
+- Custom sensor fusion module for multiple IMU redundancy
+- Not present in upstream PX4
+- Configured via `CONFIG_MODULES_DUAL_IMU_FUSION=y` in board config
+
+### Development Workflow for Custom Board
+
+1. **Initial setup**:
+   ```bash
+   git clone --recursive [this-repo]
+   make submodulesupdate
+   ```
+
+2. **Modify board configuration**:
+   - Edit `boards/st/nucleo-h743zi-fc/default.px4board`
+   - Enable/disable modules via `CONFIG_MODULES_*` flags
+   - Configure drivers via `CONFIG_DRIVERS_*` flags
+
+3. **Test build**:
+   ```bash
+   make st_nucleo-h743zi-fc_default
+   ```
+
+4. **Flash and verify**:
+   ```bash
+   make st_nucleo-h743zi-fc_default upload
+   # Connect via serial console (typically /dev/ttyACM0 or COM port)
+   # Verify with MAVLink console in QGroundControl
+   ```
+
+5. **Debug via serial**:
+   - UART configuration: Typically 115200 baud, 8N1
+   - Use `dmesg`, `top`, `uorb top` in NuttShell (nsh>)
+   - MAVLink console available via `CONFIG_MODULES_MAVLINK=y`
+
+### Board-Specific Notes
+
+**Clock Configuration**:
+- HSE: 8MHz (Nucleo board limitation)
+- System clock: 480MHz (via PLL)
+- NuttX defconfig handles clock tree (no CubeMX needed)
+- Clock configuration in NuttX: `platforms/nuttx/NuttX/nuttx/boards/arm/stm32h7/`
+
+**Pin Mapping**:
+- See `build/nucleo_h743zi_pinmap.md` for complete pinout
+- Custom pin assignments in board-specific files
+- USART2 (ST-Link): Default debug console
+- SPI/I2C: Configured via NuttX board.h
+
+**NuttX Integration**:
+- NuttX submodule: `platforms/nuttx/NuttX/nuttx`
+- Board defconfig: Auto-generated from board configuration
+- No manual HAL initialization required (PX4 build system handles this)

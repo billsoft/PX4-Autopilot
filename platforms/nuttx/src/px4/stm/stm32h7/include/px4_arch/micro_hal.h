@@ -51,6 +51,7 @@ __BEGIN_DECLS
 #define RCC_APB1RSTR_TIM5RST  RCC_APB1LRSTR_TIM5RST
 
 #include <chip.h>
+#include <hardware/stm32_rcc.h>
 #include <hardware/stm32_flash.h>
 #include <arm_internal.h> //include up_systemreset() which is included on stm32.h
 #include <stm32_bbsram.h>

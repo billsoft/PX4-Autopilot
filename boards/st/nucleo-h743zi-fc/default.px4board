@@ -1,0 +1,65 @@
+# ============================================================
+# Nucleo-H743ZI 最小飞控系统板级配置
+# 目标: 双IMU+磁力计融合，输出姿态到MAVLink
+# ============================================================
+
+# === 板级标识 ===
+CONFIG_BOARD_TOOLCHAIN="arm-none-eabi"
+CONFIG_BOARD_ARCHITECTURE="cortex-m7"
+CONFIG_BOARD_SERIAL_TEL1="/dev/ttyS2"
+
+# === 系统配置 ===
+# 最小值，不使用任务规划
+CONFIG_NUM_MISSION_ITMES_SUPPORTED=100
+
+# === IMU驱动 ===
+CONFIG_DRIVERS_IMU_INVENSENSE_ICM42688P=y
+
+# === 磁力计驱动 (选择其一,默认BMM150) ===
+CONFIG_DRIVERS_MAGNETOMETER_BOSCH_BMM150=y
+# CONFIG_DRIVERS_MAGNETOMETER_ISENTEK_IST8310=y  # 备选
+# CONFIG_DRIVERS_MAGNETOMETER_ST_IIS2MDC=n  # 禁用ST芯片驱动
+
+CONFIG_COMMON_MAGNETOMETER=y
+
+# === 基础模块 (最小必需) ===
+CONFIG_MODULES_SENSORS=y              # 传感器预处理
+CONFIG_MODULES_MAVLINK=y              # MAVLink通信
+CONFIG_MODULES_CMOS_SYNC=y
+CONFIG_MODULES_DUAL_IMU_FUSION=y
+
+# === 必需的核心模块 ===
+CONFIG_MODULES_DATAMAN=y              # 使能以提供 CONFIG_NUM_MISSION_ITMES_SUPPORTED 编译宏
+
+# === 禁用不需要的核心模块 ===
+CONFIG_MODULES_EVENTS=n               # 最小系统不需要事件
+CONFIG_MODULES_LOAD_MON=n             # 不需要负载监控
+CONFIG_MODULES_LOGGER=n               # 无SD卡，不需要日志
+CONFIG_MODULES_COMMANDER=n            # 不需要飞行模式管理
+CONFIG_MODULES_EKF2=n                 # 用自定义融合替代
+CONFIG_MODULES_NAVIGATOR=n            # 无GPS，不需要导航
+CONFIG_MODULES_MC_POS_CONTROL=n       # 不需要位置控制
+CONFIG_MODULES_MC_ATT_CONTROL=n       # 不需要姿态控制
+CONFIG_MODULES_LAND_DETECTOR=n        # 不需要着陆检测
+
+# === 禁用不需要的驱动 ===
+CONFIG_DRIVERS_ADC_BOARD_ADC=n        # 不需要ADC
+CONFIG_DRIVERS_BAROMETER=n            # 不需要气压计
+CONFIG_DRIVERS_BATT_SMBUS=n           # 不需要电池
+CONFIG_DRIVERS_GPS=n                  # 不需要GPS
+CONFIG_DRIVERS_TONE_ALARM=n           # 无蜂鸣器
+CONFIG_DRIVERS_PWM_OUT=n              # 无电机输出
+CONFIG_DRIVERS_DSHOT=n                # 无DShot输出
+
+# === 系统命令 (调试必需) ===
+CONFIG_SYSTEMCMDS_DMESG=y             # 内核日志
+CONFIG_SYSTEMCMDS_I2CDETECT=y         # I2C设备扫描
+CONFIG_SYSTEMCMDS_LED_CONTROL=y       # LED控制
+CONFIG_SYSTEMCMDS_NSHTERM=y           # NuttShell终端
+CONFIG_SYSTEMCMDS_PARAM=y             # 参数系统
+CONFIG_SYSTEMCMDS_PERF=y              # 性能计数器
+CONFIG_SYSTEMCMDS_UORB=y              # uORB工具
+CONFIG_SYSTEMCMDS_VER=y               # 版本信息
+
+# === 禁用不需要的系统命令 ===
+CONFIG_SYSTEMCMDS_TOP=n

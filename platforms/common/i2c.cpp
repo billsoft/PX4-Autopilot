@@ -36,6 +36,8 @@
 #include <px4_platform_common/i2c.h>
 
 #if defined(CONFIG_I2C)
+extern const px4_i2c_bus_t px4_i2c_buses[I2C_BUS_MAX_BUS_ITEMS] __attribute__((weak)) = { };
+
 
 #ifndef BOARD_OVERRIDE_I2C_BUS_EXTERNAL
 bool px4_i2c_bus_external(int bus)
