@@ -85,9 +85,9 @@ private:
         _gyro1_filt  = _gyro1_filt  + alpha * (gyro1  - _gyro1_filt);
         _gyro2_filt  = _gyro2_filt  + alpha * (gyro2  - _gyro2_filt);
 
-        // 轴反向（若已通过 -R 校正，此处仍按文档保留可选翻转）
-        matrix::Vector3f accel2_aligned = -_accel2_filt;
-        matrix::Vector3f gyro2_aligned  = -_gyro2_filt;
+        // 二号IMU已通过驱动 -R 参数进行安装方向对齐，不在融合中再翻转轴
+        matrix::Vector3f accel2_aligned = _accel2_filt;
+        matrix::Vector3f gyro2_aligned  = _gyro2_filt;
 
         // 差噪与降噪
         matrix::Vector3f noise_accel = accel2_aligned - _accel1_filt;
