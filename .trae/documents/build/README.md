@@ -5,7 +5,7 @@
 开发基于STM32 Nucleo-H743ZI的最小飞控系统:
 
 ### 硬件配置
-- **双IMU**: 两个ICM-42688-P (SPI1 + SPI3)
+- **双IMU**: 两个ICM45686 (SPI1 + SPI3)
 - **磁力计**: BMM150 (I2C1)
 - **CMOS同步**: GPIO接收行同步信号(用于时间戳对齐)
 - **输出**: UART3 MAVLink输出姿态四元数
@@ -41,13 +41,13 @@
 
 ---
 
-#### 2. [nanopix4pin.md](nanopix4pin.md) ⭐**硬件参考**
-**状态**: ✅ 硬件设计参考
-**用途**: 您的实际硬件引脚映射
-- ICM-42688-P双IMU接口
-- BMM150磁力计I2C接线
-- 引脚冲突记录(PA7/PB13以太网冲突)
-- 实际使用的GPIO分配
+#### 2. [nucleo_h743zi_pinmap.md](nucleo_h743zi_pinmap.md) ⭐**硬件参考**
+**状态**: ✅ 官方/实用结合
+**用途**: 开发板插槽/接口与CPU引脚映射、典型接线建议
+- ICM45686 双IMU接口（SPI1 主用，SPI3 作为第二路以避以太网冲突）
+- BMM150 磁力计 I2C1 接线（PB8/PB9）
+- 以太网与 SPI2 冲突说明（PB13 等）
+- 常用 GPIO/片选选择建议
 
 **何时参考**:
 - 确认硬件接线
@@ -56,18 +56,7 @@
 
 ---
 
-#### 3. [nucleo_h743zi_pinmap.md](nucleo_h743zi_pinmap.md)
-**状态**: ✅ 官方参考
-**用途**: Nucleo-H743ZI官方引脚映射
-- Arduino接口引脚
-- Zio接口引脚
-- ST Morpho接口引脚
-- 完整STM32H743ZI引脚复用表
-
-**何时参考**:
-- 选择可用引脚
-- 理解Arduino D13/D12等标号
-- 查询复用功能
+ 
 
 ---
 
@@ -165,7 +154,7 @@ boards/st/nucleo-h743zi-fc/
 ### 自定义模块
 ```
 src/modules/dual_imu_fusion/            # 双IMU融合模块
-└── (待实现)
+└── 已实现
 ```
 
 ---
@@ -182,13 +171,11 @@ src/modules/dual_imu_fusion/            # 双IMU融合模块
 - ✅ NuttX符号链接验证
 
 ### 进行中
-- 🔄 编译验证(WSL I/O性能问题)
-- 🔄 双IMU融合模块开发
+- 🔄 硬件在环验证与调试
 
 ### 待完成
-- ⏳ CMOS GPIO同步信号接口
-- ⏳ 硬件测试和调试
-- ⏳ MAVLink姿态输出验证
+- ⏳ 传感器实际频率与融合参数调优
+- ⏳ MAVLink带宽与流控参数调优
 
 ---
 
