@@ -5,7 +5,7 @@
 开发基于STM32 Nucleo-H743ZI的最小飞控系统:
 
 ### 硬件配置
-- **双IMU**: 两个ICM45686 (SPI1 + SPI3)
+- **双IMU**: 两个ICM42688P (SPI1 + SPI3)
 - **磁力计**: BMM150 (I2C1)
 - **CMOS同步**: GPIO接收行同步信号(用于时间戳对齐)
 - **输出**: UART3 MAVLink输出姿态四元数
@@ -41,13 +41,9 @@
 
 ---
 
-#### 2. [nucleo_h743zi_pinmap.md](nucleo_h743zi_pinmap.md) ⭐**硬件参考**
-**状态**: ✅ 官方/实用结合
-**用途**: 开发板插槽/接口与CPU引脚映射、典型接线建议
-- ICM45686 双IMU接口（SPI1 主用，SPI3 作为第二路以避以太网冲突）
-- BMM150 磁力计 I2C1 接线（PB8/PB9）
-- 以太网与 SPI2 冲突说明（PB13 等）
-- 常用 GPIO/片选选择建议
+#### 2. [STM32_743zi_pin.md](STM32_743zi_pin.md) ⭐**硬件参考**
+**状态**: ✅ 最新、与代码一致
+**用途**: 开发板插槽/接口与CPU引脚映射、片选与连线建议（SPI1/3、I2C1、USART3、USB、LED）
 
 **何时参考**:
 - 确认硬件接线
@@ -108,7 +104,7 @@
 ### 遇到编译错误
 1. 首先检查 [px4_custom_board_complete_guide.md](px4_custom_board_complete_guide.md) 的常见错误章节
 2. 参考 [boards/px4/fmu-v6x](../../boards/px4/fmu-v6x/) 标准实现
-3. 确认 [nanopix4pin.md](nanopix4pin.md) 引脚配置无冲突
+3. 确认 [STM32_743zi_pin.md](STM32_743zi_pin.md) 引脚配置无冲突
 
 ### 添加新功能
 1. 查阅 [build_system_complete_guide.md](build_system_complete_guide.md) 了解如何添加模块

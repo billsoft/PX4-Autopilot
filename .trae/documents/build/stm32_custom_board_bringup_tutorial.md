@@ -341,6 +341,62 @@ static constexpr bool unused = validateSPIConfig(px4_spi_buses);
 
 > 产出与验证：构建期能看到这些源文件参与编译与链接；运行期 `dmesg`/`top` 显示模块与设备任务正常。
 
+### 新增自定义模块并在脚本中启动（仿 ekf2）
+
+- 目录与文件：在 `src/modules/<your_module>/` 下创建
+  - `CMakeLists.txt`：
+    ```
+    px4_add_module(
+        MODULE <your_module>
+        MAIN <your_module>
+        SRCS <YourModule>.cpp
+        MODULE_CONFIG
+            module.yaml
+    )
+    ```
+  - `Kconfig`：
+    ```
+    menuconfig MODULES_<YOUR_MODULE>
+        bool "<your_module>"
+        default y
+    ```
+  - `module.yaml`：可选（串口/参数等配置，参考 validation/module_schema.yaml）
+  - 在板配置 `.px4board` 启用：`CONFIG_MODULES_<YOUR_MODULE>=y`
+
+- 启动脚本：在 `boards/<board>/init/rc.board_sensors` 中添加：
+  ```sh
+  <your_module> start [args]
+  ```
+  方式与 `ekf2 start` 相同。
+
+- 运行期控制 GPIO/串口：
+  - GPIO：
+    - 初始化：`px4_arch_configgpio(pinset)`（映射 NuttX `stm32_configgpio`）
+    - 写电平：`px4_arch_gpiowrite(pinset, value)`（映射 NuttX `stm32_gpiowrite`）
+  - 串口：使用 `/dev/ttyS2`（VCP，115200）进行 NSH 与日志；或在模块内打开设备并用 `termios` 设置（需 `CONFIG_SERIAL_TERMIOS`）
+
+- 工作队列：
+  - 继承 `px4::ScheduledWorkItem`（头文件：`<px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>`）
+  - `ScheduleOnInterval(ns)` 周期执行；`main` 中调用 `ScheduleNow()` 触发首次运行
+
+- 验证：
+  - 构建日志中出现模块目标与注册；ROMFS 脚本包含你的启动命令；运行期 `uorb top` 与模块日志可见
+
+### NuttX GPIO 与 PX4 框架集成（LED 极性与验证）
+
+- 映射关系：
+  - `px4_arch_configgpio/px4_arch_gpiowrite` → `stm32_configgpio/stm32_gpiowrite`
+  - `board.h/board_config.h` 提供引脚宏与初始化列表（`PX4_GPIO_INIT_LIST`）
+
+- LED 极性：
+  - 高有效：`BOARD_LED_ON=1/BOARD_LED_OFF=0`；初始 `GPIO_OUTPUT_CLEAR`（默认灭灯）；写高点亮
+  - 低有效：`BOARD_LED_ON=0/BOARD_LED_OFF=1`；初始 `GPIO_OUTPUT_SET`（默认灭灯）；写低点亮
+
+- 验证技巧：
+  - 复位后加入心跳慢闪（~5s），确保肉眼可见
+  - 提供 `test <secs>` 自检命令（例如三灯交替闪烁）确认调度与写电平链路正常
+  - 若某一灯异常，使用 `-invert1/-invert2/-invert3` 单路反相修正
+
 文件：`boards/st/nucleo-h743zi-fc/src/i2c.cpp`
 - 定义 `px4_i2c_buses` 为强符号，包含 I2C1 外部设备；与类型/维度严格匹配。
 
@@ -861,6 +917,199 @@ wsl bash -lc "cd /mnt/d/code/px4/PX4-Autopilot && make savedefconfig" # 保存�
 - 验证大小与段布局：`arm-none-eabi-size` 与链接脚本（`.ld`）报告。
 
 > 新手须知：`.px4` 包含板 ID 与版本元数据，QGC 刷写时会校验匹配性；不要手工修改 `.px4` 中的 JSON 结构。
+
+---
+
+## 烧写与启动（.px4/.bin/.elf，以 Nucleo‑H743ZI 为例）
+
+目标：将已构建的固件烧写到 ST 官方开发板 Nucleo‑H743ZI，并正确启动 NuttX 与 PX4 模块（uORB、mavlink、融合模块等）。
+
+总览（两条路径）：
+- 使用 PX4 Bootloader + QGroundControl（适合量产与安全升级）：需要先在板上烧写 PX4 Bootloader；之后通过 QGC 选择 `.px4` 包进行升级。
+- 使用 ST‑LINK/STM32CubeProgrammer（开发调试友好）：直接将 `.bin` 或 `.elf` 写入 `Flash @ 0x08000000`，适用于未安装 PX4 Bootloader 的场景。
+
+路径 A：PX4 Bootloader + QGC（.px4 包）
+- 准备：
+  - 安装 PX4 Bootloader（适配你的 `board_id`）。Bootloader 工程参考 PX4 官方 Bootloader 仓库；烧写地址通常位于 Flash 起始扇区，应用固件链接到 Bootloader 之后的偏移。
+  - 在本项目的打包步骤中，确保 `Tools/px_mkfw.py` 为你的板生成正确的 `board_id` 与版本元数据。
+- 操作步骤：
+  - 用 USB 连接板（确保 Bootloader 能进入升级模式，常见为上电后短时间或按键触发）。
+  - 打开 QGroundControl → Firmware → 选择 “Custom firmware file” → 指定生成的 `.px4` 包。
+  - QGC 会与 PX4 Bootloader 通讯并校验 `board_id` 后自动刷写；完成后设备重启进入应用固件。
+- 验证：
+  - 打开 QGC MAVLink Console 或串口终端，看到 `nsh>` 与 PX4 启动日志。
+  - `uorb top`、`mavlink status`、`icm42688p status` 显示模块与设备工作正常。
+- 原理与适用：
+  - `.px4` 是带元数据的打包格式，Bootloader 校验硬件匹配与版本，支持可靠的现场升级；适合长期维护与批量设备。
+  - 需要先安装 Bootloader，且应用链接地址必须与 Bootloader 约定一致（偏移/布局由链接脚本控制）。
+
+路径 B：ST‑LINK / STM32CubeProgrammer（.bin/.elf）
+- 准备：
+  - 将 Nucleo‑H743ZI 的 ST‑LINK USB 连接至 PC；安装 STM32CubeProgrammer。
+  - 使用本项目构建产物中的 `.bin` 或 `.elf`（路径见“WSL 构建与验证”章节的产物位置）。
+- 操作步骤（推荐使用 `.bin`）：
+  - 打开 STM32CubeProgrammer → 选择 ST‑LINK → Connect。
+  - Erase 全片或目标扇区（确保无旧 Bootloader/应用残留影响启动）。
+  - 在 “Download” 中选择你的 `.bin` 文件，Program 到 `0x08000000`（Flash 起始地址）。
+  - Reset 并运行。
+- 可选（使用 `.elf`）：
+  - 选择 “ELF” 文件并 Program（工具自动解析段地址）；或通过 OpenOCD 加载 `.elf` 并写入 Flash。
+- 验证：
+  - 打开串口终端连接板载 VCP（USART3，`COMx`，115200）。
+  - 观察启动：NuttX → `nsh>` → PX4 平台初始化 → ROMFS `rcS` 脚本触发模块启动。
+  - 执行：`uorb top`、`listener vehicle_attitude`、`mavlink status`、`icm42688p status`、`bmm150 start -I -b 1` 等。
+- 原理与适用：
+  - 直接将应用写到 Flash 起始（单镜像启动），不依赖 Bootloader；适合开发调试与最小系统 bring‑up。
+  - `.px4` 包不能直接由 ST‑LINK 写入；需要 `.bin`/`.elf`。若未来需要 QGC 升级，再考虑安装 Bootloader 并切换到 `.px4` 路径。
+
+启动流程与细节（两路径通用）：
+- 复位后：BootROM →（若有）PX4 Bootloader → 应用固件（NuttX + PX4）。
+- NuttX 启动：
+  - `stm32_boardinitialize` 完成早期 GPIO/电源初始化；根据 `board.h` 时钟与引脚宏配置外设时钟与 AF。
+  - 驱动注册创建 `/dev/spi1`、`/dev/spi3`、`/dev/i2c1`、`/dev/ttyS2` 等设备节点（与 `defconfig`、`board.h` 一致）。
+- PX4 启动：
+  - `board_app_initialize()` 进入平台初始化；加载 ROMFS → `rcS` → 板脚本 `rc.board_sensors`。
+  - 按脚本启动 IMU/磁力计/CMOS 同步/融合模块，并开启 MAVLink 流（120 Hz 四元数与高分辨率 IMU，50 Hz 欧拉角）。
+
+常见问题与修复：
+- 烧写后没有串口输出：检查 `USART3` 波特率 115200、VCP COM 号与线缆；确认 `defconfig` 中已启用 `USART3` 并设为控制台。
+- IMU 不工作：确认 `spi.cpp` 片选引脚与接线、`rc.board_sensors` 的总线编号（`-b 1/3`）与旋转参数（`-R`）。
+- MAVLink 无数据：检查 `mavlink stream` 频率与端口带宽；启用 `CONFIG_PIPES/CONFIG_SERIAL_TERMIOS`；必要时提高波特率或改用独立 UART。
+- `.px4` 刷写失败：确认已安装 PX4 Bootloader，且包内 `board_id` 与设备匹配；否则改用 `.bin`/`.elf` 与 ST‑LINK 路径。
+
+操作提示（本项目最小板）：
+- 首选开发路径：使用 STM32CubeProgrammer 将 `.bin` 写到 `0x08000000`，快速 bring‑up 与调试；待系统稳定后再引入 Bootloader 与 `.px4` 升级链路。
+- 验证闭环：串口进入 `nsh>` → 执行脚本自动启动 → 通过 `uorb/mavlink` 验证话题与流速 → 相机侧接收四元数与时间戳满足防抖需求。
+
+---
+
+## 生成 ELF/BIN 的构建命令（含回退）
+
+标准构建（会同时生成 `.elf/.bin/.px4`）：
+```bash
+wsl bash -lc "cd /mnt/d/code/px4/PX4-Autopilot && make st_nucleo-h743zi-fc_default -j4"
+# 构建完成后，产物位置：
+# /mnt/d/code/px4/PX4-Autopilot/build/st_nucleo-h743zi-fc_default/st_nucleo-h743zi-fc_default.{elf,bin,px4}
+```
+
+仅当你的工具链或目标未自动生成 `.bin` 时，可用回退命令从 `.elf` 手动导出：
+```bash
+wsl bash -lc "cd /mnt/d/code/px4/PX4-Autopilot && arm-none-eabi-objcopy -O binary build/st_nucleo-h743zi-fc_default/st_nucleo-h743zi-fc_default.elf build/st_nucleo-h743zi-fc_default/st_nucleo-h743zi-fc_default.bin"
+```
+
+快速检查产物：
+```bash
+wsl bash -lc "ls -l /mnt/d/code/px4/PX4-Autopilot/build/st_nucleo-h743zi-fc_default | egrep '(elf|bin|px4)$'"
+```
+
+说明：
+- PX4 的构建系统在成功链接后会生成 `.elf` 并自动导出 `.bin` 与打包 `.px4`；若你的本地工具链版本差异导致未生成 `.bin`，使用回退命令导出即可。
+- `.bin` 适合 ST-LINK 直接烧写；`.elf` 适合调试与 CLI 解析段地址；`.px4` 需配合 PX4 Bootloader 与 QGC。
+
+---
+
+## GUI 烧写工具
+
+位置与运行：
+```bash
+python tools/flash/gui/flash_gui.py
+```
+
+功能要点：
+- 自动探测 STM32CubeProgrammer CLI 与固件产物，支持手动浏览
+- 设置目标、镜像类型、地址、擦除策略与 CLI 路径
+- 开始烧写并显示实时日志与结果状态
+- 打开构建目录、从 ELF 导出 BIN（如安装 `arm-none-eabi-objcopy`）
+
+适用场景：
+- Windows 开发环境快速操作 ST-LINK 烧写
+- 不引入第三方 GUI 依赖（tkinter）
+
+---
+
+## STM32CubeProgrammer 安装与配置（CLI/GUI）
+
+工具概览：
+- STM32CubeProgrammer 提供 GUI 与 CLI 两种形态，可编程 STM32 片内存储（Flash/RAM/OTP）与外部存储，并支持选项字节编程、校验与脚本自动化。
+- 我们在项目中使用 CLI 版本配合 ST-LINK（SWD）进行烧写，兼容 `.elf/.bin/.px4`。
+
+下载安装（Windows）：
+- 下载地址：`https://www.st.com/en/development-tools/stm32cubeprog.html`
+- 前往 ST 官方页面下载并安装 STM32CubeProgrammer（安装时保持默认设置）。
+- 默认 CLI 路径：`C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe`
+- 安装完成后，建议：
+  - 将 `STM32_Programmer_CLI.exe` 所在目录加入系统 `PATH`，或
+  - 设置环境变量 `STM32_CLI` 指向完整路径（我们的脚本会优先读取）。
+
+验证 CLI 可用：
+```powershell
+"C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe" -h
+```
+- 若提示“找不到 STM32_Programmer_CLI.exe”，请确认已安装并按上一步配置 `PATH` 或 `STM32_CLI`。
+
+常用 CLI 选项（SWD）：
+- 连接：`-c port=SWD [freq=4000]`
+- 擦除：`-e all`
+- 写入：
+  - 写文件：`-w <file> [address]`（`bin` 需指定地址，如 `0x08000000`；`elf/hex/srec` 可不指定地址）
+- 校验：`-v`
+- 复位：`-rst`
+- 读取上传：`--upload <start_address> <size> <file>`（导出为 `.bin/.hex/.srec`）
+
+连接方式与注意事项：
+- ST-LINK（SWD）为默认与推荐方式；若改用 UART/USB DFU 等，需满足芯片“系统存储器启动模式（System memory）”要求。
+- GUI 版本可能需要 JRE 支持（新版本通常自带），CLI 不依赖 GUI。
+
+排错与提示：
+- CLI 未找到：安装工具、检查 `PATH` 或设置 `STM32_CLI`。
+- ST-LINK 驱动：若无法连接，请安装/更新 ST-LINK 驱动（随 CubeProgrammer 提供或 ST-LINK Utility）。
+- WSL 环境：CLI 为 Windows 程序，请在 Windows 端运行；WSL 仅用于构建，不用于烧写。
+
+---
+
+## ELF / BIN / PX4 的区别、技术原理与用途
+
+ELF（Executable and Linkable Format）
+- 原理：包含段与节（`.text/.data/.bss`）、符号表、调试信息、入口点与内存映射；由链接脚本（`.ld`）决定放置到 Flash/RAM 的地址布局。
+- 特点：可被调试器（`gdb`/OpenOCD）解析，便于断点、符号定位与回溯；工具（STM32CubeProgrammer CLI）可解析段地址直接写入。
+- 用途：开发与调试首选；查看体积与段布局（`arm-none-eabi-size`）；可用于“带段解析”的烧写。
+- 风险：体积较大；写入 Flash 时需工具正确解析段地址，否则可能写错区域。
+
+BIN（Raw Binary Image）
+- 原理：将 ELF 的可装载段线性展平为原始字节流，通常从应用链接的起始地址（如 `0x08000000`）开始；无头部、无符号、无元数据。
+- 特点：体积小、通用；不携带任何板信息或分段描述，写入时必须指定准确的目标地址。
+- 用途：配合 ST‑LINK（STM32CubeProgrammer）在开发阶段直接烧写到 Flash 起始；适合快速 bring‑up 与测试。
+- 风险：地址指定错误会导致不可启动或覆盖 Bootloader；不适合安全升级场景。
+
+PX4（带元数据的固件包）
+- 原理：在二进制固件基础上封装 JSON 元数据（`board_id`、版本、哈希、文件大小等），供 PX4 Bootloader 与 QGroundControl 校验与刷写。
+- 特点：Bootloader 校验硬件匹配与完整性，支持安全升级与批量管理；QGC 提供用户界面一键升级。
+- 用途：量产与现场升级；需要设备已安装 PX4 Bootloader 且应用链接地址与 Bootloader 约定一致。
+- 风险：无 Bootloader 时无法直接通过 ST‑LINK刷写；更适合稳定阶段与发布流转。
+
+何时使用哪一个
+- 开发调试：优先用 `.bin`（快速擦写）或 `.elf`（调试与段解析）；两者均不依赖 Bootloader。
+- 现场升级/量产：使用 `.px4` 配合 PX4 Bootloader 与 QGC；避免误刷与版本不匹配。
+- 联合策略：开发期 `.bin`→稳定后引入 Bootloader→通过 `.px4` 管理升级。
+
+生成方式与位置
+- 标准构建会同时生成三者：`build/st_nucleo-h743zi-fc_default/st_nucleo-h743zi-fc_default.{elf,bin,px4}`。
+- 若未生成 `.bin`，可从 `.elf` 回退导出：`arm-none-eabi-objcopy -O binary ...elf ...bin`。
+- `.px4` 由 `Tools/px_mkfw.py` 打包生成，需正确设置 `board_id` 与版本。
+
+调试与刷写工具对应关系
+- `.elf`：`gdb`/OpenOCD、STM32CubeProgrammer（段解析写入）。
+- `.bin`：STM32CubeProgrammer（指定地址写入）。
+- `.px4`：PX4 Bootloader + QGroundControl。
+
+与 Bootloader 的关系
+- `.px4` 需要 Bootloader；`.elf/.bin` 不需要。
+- 一旦引入 Bootloader，应用链接地址需与 Bootloader 约定偏移一致，确保启动链路正确。
+
+验证建议
+- 构建后用 `arm-none-eabi-size` 检查 `.elf` 段大小与总大小；确认与链接脚本预期一致。
+- 烧写 `.bin` 后通过串口观察 `nsh>` 与模块启动；如失败，检查地址与擦除策略。
+- 使用 `.px4` 经 QGC 刷写时，观察 Bootloader 校验日志与成功提示；固件重启后验证话题与流速闭环。
 
 ---
 

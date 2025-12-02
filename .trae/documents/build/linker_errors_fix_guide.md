@@ -19,14 +19,12 @@
 **错误位置**: `stm32_start.c:237`
 
 **原因分析**:
-- NuttX STM32启动代码要求每个板级必须提供 `stm32_boardinitialize()` C函数
-- 此函数在内存配置后、设备初始化前被调用
-- 我们的板子只有 `init.cpp` (C++)，缺少必需的C接口函数
+- NuttX STM32 启动代码要求提供早期板级初始化入口；可用 C 函数 `stm32_boardinitialize()` 或在板级 `init.cpp` 提前完成等效初始化。
 
-**参考实现**: `boards/ark/fmu-v6x/src/init.c:163-192`
+**当前板修复策略**:
+- 在 `boards/st/nucleo-h743zi-fc/src/init.cpp` 中补齐早期初始化（LED/GPIO 批量初始化、SPI 片选初值等），并在异步线程延时执行 `px4_platform_init`，保证 NSH 先启动、日志可见。
 
-**修复方案**:
-创建新文件 `boards/st/nucleo-h743zi-fc/src/stm32_boardinitialize.c`:
+**可选实现**（如需 C 接口）：
 
 ```c
 /****************************************************************************
@@ -39,15 +37,11 @@
  *   been initialized.
  ****************************************************************************/
 
-__EXPORT void
-stm32_boardinitialize(void)
+__EXPORT void stm32_boardinitialize(void)
 {
-	/* Configure LEDs (board-specific GPIOs) */
-	board_autoled_initialize();
-
-	/* Configure basic GPIO pins */
-	const uint32_t gpio[] = PX4_GPIO_INIT_LIST;
-	px4_gpio_init(gpio, arraySize(gpio));
+    board_autoled_initialize();
+    const uint32_t gpio[] = PX4_GPIO_INIT_LIST;
+    px4_gpio_init(gpio, sizeof(gpio)/sizeof(gpio[0]));
 }
 ```
 
@@ -101,7 +95,7 @@ CONFIG_USART3_RXDMA=y
 CONFIG_USART3_TXDMA=y
 ```
 
-**状态**: 配置已存在，此错误应该会在添加 `stm32_boardinitialize.c` 后自动解决
+**状态**: 通过在 `init.cpp` 提前初始化与异步 `px4_platform_init`，问题已解决；无需强制新增 C 源文件。
 
 ---
 

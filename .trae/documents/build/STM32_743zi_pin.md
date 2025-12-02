@@ -42,7 +42,7 @@
 - SCK: PA5 - AF Push Pull No Pull Low - CN7 pin10 / D13 (Zio).
 - MISO: PA6 - AF Push Pull No Pull Low - CN7 pin12 / D12.
 - MOSI: PD7 - AF Push Pull No Pull Low - CN11 pin45 (Morpho).
-- NSS: 任意空闲 GPIO (e.g., PA4 n/a, CN7 pin17 / D24) - 软件控 Output Push Pull。
+- NSS (CS): PD14 - Output Push Pull。
 - 建议: IMU1 接 Zio D11-13, CS PA4; 模板 PD7 MOSI 备用 AF5 (避 PA7 ETH)。
 
 ### SPI2 (IMU2 备用, 模板预设)
@@ -56,7 +56,7 @@
 - SCK: PC10 - AF Push Pull No Pull Low - CN8 pin6 / D45 (Zio).
 - MISO: PC11 - AF Push Pull No Pull Low - CN8 pin8 / D46。
 - MOSI: PB2 - AF Push Pull No Pull Low - CN12 pin22 (Morpho)。
-- NSS: 任意空闲 (e.g., PA15 n/a, CN7 pin9 / D20) - Output Push Pull。
+- NSS (CS): PA15 - Output Push Pull。
 - 建议: IMU2 接 Zio D45-47 (SDMMC 复用 SPI3), CS PA15; 模板 PB2 MOSI 备用 AF7 (避 QSPI PB2)。
 
 ### I2C1 (磁力计)
@@ -76,7 +76,7 @@
 - 建议: 输出用 VCP (USB 虚拟 COM); 备用 UART1 PA9/10 n/a (CN12 pin21/23, AF7)。
 
 ## 设计提示 (针对你的应用)
-- **应用连线**: IMU1 Zio D11-13 (PA5/6/PD7 MOSI), CS PA4; IMU2 Zio D45-47 (PC10/11/PB2 MOSI), CS PA15; I2C Zio D14 (PB9 SDA) + PB6 SCL Morpho; EXTI PE3/4 Morpho; UART VCP USB。
+- **应用连线**: IMU1 Zio D11-13 (PA5/6/PD7), CS PD14；IMU2 Zio D45-47 (PC10/11/PB2), CS PA15；I2C Zio D14 (PB9) + PB6；EXTI PE3/4；UART VCP USB。
 - **电源注意**: IMU/磁力计 3.3V (CN8 pin7), GND (CN7 pin8); VIN 外部稳压。
 - **中断**: EXTI NVIC 启用, 优先 0/0 (高); 模板 false 需勾。
 - **兼容**: 3.3V 传感器; SB 焊桥改复用 (Table 12, e.g., SB118 OFF 释 PB13)。
@@ -85,14 +85,8 @@
 
 ## 备注
 - 本文档只针对你的板模板配置 (优先正确, 板硬件专用); 空闲 n/a Pin 均可用 GPIO (Input/EXTI 等)。
-- 测试: CubeIDE 生成, 验证 LED 闪 (PB0/7/14), VCP 输出, EXTI B1 按键中断。
-- 图片: UM1974 p1 板视图, MB1364 Sheet 1 电源 (你的图片)。
+- 测试: 验证 LED 闪 (PB0/7/14), VCP 输出, EXTI B1 按键中断。
 
 ![Nucleo-144 Top View](um1974-page1-top-view.png)
-*Figure 1 from UM1974: Nucleo-144 board (top view)*
-
 ![Nucleo-144 Bottom View](um1974-page1-bottom-view.png)
-*Figure 2 from UM1974: Nucleo-144 board (bottom view)*
-
 ![MB1364 Top & Power Schematic](mb1364-sheet1.png)
-*MB1364 Sheet 1: Top & Power (电源和连接示意)*

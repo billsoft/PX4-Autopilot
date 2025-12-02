@@ -1,0 +1,6 @@
+menuconfig MODULES_BOARD_STATUS_LEDS
+	bool "board_status_leds"
+	default y
+	---help---
+		Enable board status LEDs module (IMU/Mag/Fusion indication)
+

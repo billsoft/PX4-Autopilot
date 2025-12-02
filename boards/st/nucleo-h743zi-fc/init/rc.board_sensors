@@ -7,6 +7,15 @@ usleep 50000
 cmos_sync start
 dual_imu_fusion start
 sensors start
+mavlink status
+board_status_leds start
+mavlink stream -u -r 1 -s DEBUG
+# board_status_leds test 10
 mavlink stream -u -r 120 -s ATTITUDE_QUATERNION
 mavlink stream -u -r 120 -s HIGHRES_IMU
 mavlink stream -u -r 50 -s ATTITUDE
+if icm42688p status | grep -q "Not running"; then
+  if bmm150 status | grep -q "Not running"; then
+    sensor_stub start
+  fi
+fi

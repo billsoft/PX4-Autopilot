@@ -27,6 +27,8 @@ CONFIG_MODULES_SENSORS=y              # 传感器预处理
 CONFIG_MODULES_MAVLINK=y              # MAVLink通信
 CONFIG_MODULES_CMOS_SYNC=y
 CONFIG_MODULES_DUAL_IMU_FUSION=y
+CONFIG_MODULES_BOARD_STATUS_LEDS=y
+CONFIG_MODULES_SENSOR_STUB=y
 
 # === 必需的核心模块 ===
 CONFIG_MODULES_DATAMAN=y              # 使能以提供 CONFIG_NUM_MISSION_ITMES_SUPPORTED 编译宏
@@ -35,7 +37,7 @@ CONFIG_MODULES_DATAMAN=y              # 使能以提供 CONFIG_NUM_MISSION_ITMES
 CONFIG_MODULES_EVENTS=n               # 最小系统不需要事件
 CONFIG_MODULES_LOAD_MON=n             # 不需要负载监控
 CONFIG_MODULES_LOGGER=n               # 无SD卡，不需要日志
-CONFIG_MODULES_COMMANDER=n            # 不需要飞行模式管理
+CONFIG_MODULES_COMMANDER=n            # 不需要飞行模式管理 (避免依赖 geofence 等参数)
 CONFIG_MODULES_EKF2=n                 # 用自定义融合替代
 CONFIG_MODULES_NAVIGATOR=n            # 无GPS，不需要导航
 CONFIG_MODULES_MC_POS_CONTROL=n       # 不需要位置控制
@@ -60,6 +62,7 @@ CONFIG_SYSTEMCMDS_PARAM=y             # 参数系统
 CONFIG_SYSTEMCMDS_PERF=y              # 性能计数器
 CONFIG_SYSTEMCMDS_UORB=y              # uORB工具
 CONFIG_SYSTEMCMDS_VER=y               # 版本信息
+CONFIG_SYSTEMCMDS_TOPIC_LISTENER=y    # 话题监听器
 
 # === 禁用不需要的系统命令 ===
 CONFIG_SYSTEMCMDS_TOP=n

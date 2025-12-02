@@ -11,6 +11,35 @@
 #include <arch/board/board.h>
 #include "board_config.h"
 #include <px4_platform_common/i2c.h>
+#include <px4_platform_common/init.h>
+#include <syslog.h>
+#include <errno.h>
+#include <px4_platform/board_dma_alloc.h>
+#include <drivers/drv_board_led.h>
+#include <stm32_spi.h>
+#include <sched.h>
+#include <unistd.h>
+extern "C" int board_status_leds_main(int argc, char *argv[]);
+
+void stm32_spiinitialize(void);
+
+static int px4_init_thread(int argc, char *argv[])
+{
+    syslog(LOG_INFO, "[InitThread] Starting px4_platform_init in 10s...\n");
+    usleep(10000000);
+
+    syslog(LOG_INFO, "[InitThread] Calling px4_platform_init\n");
+    int ret = px4_platform_init();
+    syslog(LOG_INFO, "[InitThread] px4_platform_init returned: %d\n", ret);
+    int conf = px4_platform_configure();
+    syslog(LOG_INFO, "[InitThread] px4_platform_configure returned: %d\n", conf);
+
+    const char *argv_leds[] = {"board_status_leds", "start"};
+    syslog(LOG_INFO, "[InitThread] starting board_status_leds\n");
+    (void)board_status_leds_main(2, (char **)argv_leds);
+    syslog(LOG_INFO, "[InitThread] board_status_leds started\n");
+    return ret;
+}
 
 /****************************************************************************
  * Name: board_peripheral_reset
@@ -77,8 +106,8 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 		usleep(100000);  /* 100ms */
 	}
 
-	/* ========== 4. Turn on yellow LED to indicate initialization complete ========== */
-	px4_arch_gpiowrite(GPIO_nLED_YELLOW, BOARD_LED_ON);
+    /* ========== 4. Initialization complete (module controls LEDs thereafter) ========== */
+    px4_arch_gpiowrite(GPIO_nLED_YELLOW, BOARD_LED_OFF);
 
 	/* ========== 5. Initialize sensor power (all SPI buses) ========== */
 	board_control_spi_sensors_power(true, 0xffff);
@@ -86,5 +115,23 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 	/* Ensure px4_i2c_buses is linked in from i2c.cpp */
 	(void)px4_i2c_buses;
 
-	return 0;
+	/* ========== 6. Initialize PX4 Platform (mounts ROMFS, starts uORB, etc.) ========== */
+
+    /* SPI Init */
+    stm32_spiinitialize();
+
+    /* DMA Alloc Init */
+    if (board_dma_alloc_init() < 0) {
+        syslog(LOG_ERR, "[Init] DMA alloc init failed\n");
+    }
+
+    /* Start PX4 init in a separate task to avoid blocking NSH startup */
+    int taskid = task_create("px4_init", 100, 4096, px4_init_thread, NULL);
+    if (taskid < 0) {
+        syslog(LOG_ERR, "[Init] Failed to start px4_init task: %d\n", errno);
+    } else {
+        syslog(LOG_INFO, "[Init] Started px4_init task (id=%d)\n", taskid);
+    }
+
+    return OK;
 }

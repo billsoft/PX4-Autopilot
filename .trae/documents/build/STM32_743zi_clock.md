@@ -5,15 +5,15 @@
 最后更新: 2025-11-28
 ---
 
-# Nucleo-H743ZI Pin 配置指南 (针对你的应用: 2 IMU SPI, 磁力计 I2C, 2 CMOS GPIO EXTI, UART 输出)
+# Nucleo-H743ZI Clock 配置指南（SPI/USART/系统时钟）
 
 ## 文档范围
-- 只针对你的 Nucleo-H743ZI 开发板和 CubeMX 板模板预设 Pin 配置 (你的复制列表), 为你的应用定制: SPI1 (IMU1), SPI3 (IMU2, 你的 PB2 MOSI 指定), I2C1 (磁力计, PB6 SCL), GPIO EXTI (CMOS 同步, 模板 line[15:10] false, 推荐空闲 n/a Pin), USART3 (输出, VCP 默认 PD8/9)。
+- 说明本板的时钟树与外设时钟分配：SYSCLK、SPI123、USART3、USB 等；明确约束与推荐配置。
 - 基于板模板列表, 只列板硬件实际 Pin (模板预设 ~30 Pin 固定如 LED/ETH/USB/VCP/OSC, 剩余 ~110 n/a 空闲可配置 GPIO)。
 - 不考虑裸 MCU 通用或其他板, 只板子实际 (Morpho/Zio 插槽位置, 模板模式如 AF PP/OD No Pull Low)。
 - 注意: 模板预设是正确的 (板专用, 确保硬件工作 e.g., LED Output Low, ETH AF PP, VCP AF PP STLK); n/a Pin 可用 GPIO (Input/EXTI 等, Pull No, Speed Low); 主从模式影响 NSS (Master PP 输出控从, 你的 Master OK); 冲突如 PB2 QSPI/ETH, CubeMX Disable 释放。
 
-## 板卡总览 (针对你的应用)
+## 时钟树要点
 - MCU: STM32H743ZIT6 (LQFP144, Cortex-M7 @ 480 MHz, 2MB Flash, 1MB RAM)。
 - 固定硬件 Pin (模板预设, 你的应用避或 Disable):
   - LED: PB7 (LD2 蓝, Output Low PP No Pull Low Disable), PB14 (LD3 红, Output Low PP No Pull Low n/a)。
@@ -21,22 +21,33 @@
   - USB OTG FS: PA8 (SOF AF PP No Pull Low USB_SOF TP1 true), PA9 (VBUS Input No Pull n/a USB_VBUS true), PA10 (ID AF PP No Pull Low USB_ID true), PA11 (DM AF PP No Pull Low USB_DM true), PA12 (DP AF PP No Pull Low USB_DP true), PG6 (PowerSwitch Output Low PP No Pull Low USB_PowerSwitchOn STMPS2151STR_EN true), PG7 (OverCurrent Input No Pull n/a USB_OverCurrent STMPS2151STR_FAULT true)。
   - VCP (USART3 输出): PD8 (TX AF PP No Pull Low STLK_RX STM32F103CBT6_PA3 true), PD9 (RX AF PP No Pull Low STLK_TX STM32F103CBT6_PA2 true)。
   - Debug: PA13 (SWDIO n/a TMS true), PA14 (SWCLK n/a TCK true), PB3 (SWO n/a SWO true)。
-  - OSC/Clock: PC14 (OSC32_IN n/a false), PC15 (OSC32_OUT n/a false), PH0 (OSC_IN n/a MCO true), PH1 (OSC_OUT n/a false)。
+ - HSE 8MHz（ST‑LINK MCO）→ PLL1P = 480MHz 作为 SYSCLK。
+ - SPI123 使用 PLL2P，必须 ≤ 200MHz（NuttX 限制）；推荐 192MHz。
+ - USART3 时钟来自 APB 时钟（96MHz），支持 115200 波特率。
+ - USB FS 使用 48MHz（PLL1Q/PLL3Q），与本应用无冲突。
   - ETH (RMII): PA1 (REF_CLK AF PP No Pull Low RMII_REF_CLK true), PA2 (MDIO AF PP No Pull Low RMII_MDIO true), PA7 (CRS_DV AF PP No Pull Low RMII_CRS_DV true), PB13 (TXD1 AF PP No Pull Low RMII_TXD1 true), PC1 (MDC AF PP No Pull Low RMII_MDC true), PC4 (RXD0 AF PP No Pull Low RMII_RXD0 true), PC5 (RXD1 AF PP No Pull Low RMII_RXD1 true), PG11 (TX_EN AF PP No Pull Low RMII_TX_EN true), PG13 (TXD0 AF PP No Pull Low RMII_TXD0 true)。
 - 空闲 n/a Pin (可用 GPIO ~110 个, 你的应用扩展 EXTI/Input): PA5/6 (SPI1 SCK/MISO AF PP No Pull Low false), PB2/10 (SPI3 MOSI/SPI2 SCK AF PP No Pull Low false), PC2_C/3_C/10/11 (SPI2 MISO/MOSI/SPI3 SCK/MISO AF PP No Pull Low false), PD7 (SPI1 MOSI AF PP No Pull Low false), 其他 n/a 如 PA0/1/3/4/15, PB1/4/5/11/15, PC0/6/7/9/12/14/15, PD0-6/10-15, PE0-15, PF0-15, PG0-5/8-10/12/14/15, PH1 (配置 Input/EXTI No Pull, Speed Low)。
 - 电源: USB 5V (CN1), VIN 7-12V (JP3), 3.3V 输出 (CN8 pin7 等) - 你的 IMU/磁力计用 3.3V。
 - 应用适配: IMU SPI AF PP No Pull Low (Master 推挽), 磁力计 I2C OD No Pull Low (开漏), CMOS EXTI Input Rising No Pull, UART AF PP No Pull Low (VCP 输出)。
 
-## 插槽分区 (板子实际, 针对应用连线)
+## 推荐配置（board.h 片段）
 - **ST Zio (Arduino 兼容, 适合 IMU/I2C 快速接)**: CN7 (右侧上 10x2, D8-D15/GND/3.3V, e.g., SPI1 D11-13), CN8 (左侧上 8x2, IOREF/RESET/3.3V/5V/GND/VIN), CN9 (左侧下 15x2, A0-A5/GND/I2C2, e.g.,备用 GPIO), CN10 (右侧下 17x2, D0-D7/GND/TIM, e.g., UART D0/1)。
-- **ST Morpho (全 Pin, 适合 CMOS EXTI/扩展)**: CN11 (左侧 38x2, PC10-PD7/PE3 等, e.g., PD7 MOSI/CN11 pin45), CN12 (右侧 38x2, PC9-PB13/PA10 等, e.g., PB2 MOSI/CN12 pin22, PB6 SCL/CN12 pin17)。
+```
+/* SPI123 clock source - use PLL2P (192 MHz) */
+#define STM32_PLLCFG_PLL2M       RCC_PLLCKSELR_DIVM2(2)
+#define STM32_PLLCFG_PLL2N       RCC_PLL2DIVR_N2(96)
+#define STM32_PLLCFG_PLL2P       RCC_PLL2DIVR_P2(2)
+#define STM32_RCC_D2CCIP1R_SPI123SRC RCC_D2CCIP1R_SPI123SEL_PLL2
+```
 - **USB OTG (Micro-AB, CN4, 输出备用)**: 模板预设 PA8-12/PG6/7, 你的应用不用可 Disable 释放 PA9/10 UART。
 - **Ethernet (RJ45, CN5, 如冲突 Disable)**: 模板预设 PA1/2/7, PB13, PC1/4/5, PG11/13, 你的 SPI PB2/PA5 无直接冲突, 但 PB13 用 Disable ETH。
 - **ST-Link (Micro-B, CN1, VCP 输出)**: 模板预设 PD8/9, 你的 UART 输出用此 (USB 虚拟 COM)。
 - **电源/地**: 3.3V (CN8 pin7), GND (CN7 pin8 等), 5V (CN8 pin9) - 应用传感器共地。
 
-## 关键接口 Pin 配置 (基于你的模板列表, 针对应用)
-所有模式/配置从你的列表 (AF PP/OD No Pull Low 等, false/true 表示可用/固定), 板位置从 UM1974 Table 20/21 + 原理图。应用: IMU SPI Master AF PP, I2C OD, EXTI Input, UART AF PP VCP。
+## 构建与验证
+- 构建：`wsl make st_nucleo-h743zi-fc_default -j4`
+- 烧写：`python Tools/flash/flash_fw.py`
+- 验证：`dmesg` 查看时钟/外设初始化日志；传感器与 LED/MAVLink 按启动脚本执行。
 
 ### SPI1 (IMU1)
 - SCK: PA5 - AF Push Pull No Pull Low false - CN7 pin10 / D13 (Zio).

@@ -23,7 +23,8 @@
       "Bash(dir /s /b boardsstnucleo-h743zi-fc*.h 2)",
       "Bash(nul)",
       "Bash(git rm:*)",
-      "Bash(del .traedocumentsbuildcompilation_error_fix_report.md)"
+      "Bash(del .traedocumentsbuildcompilation_error_fix_report.md)",
+      "Bash(git -C /mnt/d/code/px4/PX4-Autopilot status)"
     ],
     "deny": [],
     "ask": []
