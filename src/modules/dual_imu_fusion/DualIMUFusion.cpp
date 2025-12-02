@@ -151,6 +151,8 @@ private:
         vehicle_attitude_s att{};
         att.timestamp = ts;
         att.timestamp_sample = ts_g1;
+
+        // 四元数输出
         att.q[0] = _q(0); att.q[1] = _q(1); att.q[2] = _q(2); att.q[3] = _q(3);
         att.delta_q_reset[0] = 0.f; att.delta_q_reset[1] = 0.f; att.delta_q_reset[2] = 0.f; att.delta_q_reset[3] = 0.f;
         att.quat_reset_counter = 0;

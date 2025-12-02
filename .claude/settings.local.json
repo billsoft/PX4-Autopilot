@@ -24,7 +24,8 @@
       "Bash(nul)",
       "Bash(git rm:*)",
       "Bash(del .traedocumentsbuildcompilation_error_fix_report.md)",
-      "Bash(git -C /mnt/d/code/px4/PX4-Autopilot status)"
+      "Bash(git -C /mnt/d/code/px4/PX4-Autopilot status)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

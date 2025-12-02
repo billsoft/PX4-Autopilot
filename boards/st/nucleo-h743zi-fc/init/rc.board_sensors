@@ -12,8 +12,8 @@ board_status_leds start
 mavlink stream -u -r 1 -s DEBUG
 # board_status_leds test 10
 mavlink stream -u -r 120 -s ATTITUDE_QUATERNION
-mavlink stream -u -r 120 -s HIGHRES_IMU
-mavlink stream -u -r 50 -s ATTITUDE
+# mavlink stream -u -r 120 -s HIGHRES_IMU  # 不需要原始IMU数据
+# mavlink stream -u -r 50 -s ATTITUDE      # 与ATTITUDE_QUATERNION冗余
 if icm42688p status | grep -q "Not running"; then
   if bmm150 status | grep -q "Not running"; then
     sensor_stub start
