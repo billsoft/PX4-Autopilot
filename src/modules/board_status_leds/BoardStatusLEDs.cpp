@@ -29,10 +29,10 @@ public:
         _mag = uORB::Subscription{ORB_ID(sensor_mag), 0};
         _att = uORB::Subscription{ORB_ID(vehicle_attitude), 0};
         _start_us = hrt_absolute_time();
-        // ensure LEDs start OFF
-        set_led(GPIO_nLED_GREEN, BOARD_LED_OFF);
-        set_led(GPIO_nLED_YELLOW, BOARD_LED_OFF);
-        set_led(GPIO_nLED_RED, BOARD_LED_OFF);
+        // ensure LEDs start with slow blink immediately
+        set_led(GPIO_nLED_GREEN, BOARD_LED_ON);
+        set_led(GPIO_nLED_YELLOW, BOARD_LED_ON);
+        set_led(GPIO_nLED_RED, BOARD_LED_ON);
         ScheduleOnInterval(100000);
         return true;
     }
@@ -50,11 +50,9 @@ public:
         mag  = (now - _t_mag) < _window_us;
         fusion = (now - _t_att) < _window_us;
         _tick++;
-        bool blink_slow_g = ((_tick + 0) % 20) < 10;
-        bool blink_slow_y = ((_tick + 7) % 20) < 10;
-        bool blink_slow_r = ((_tick + 14) % 20) < 10;
+        bool blink_slow = (_tick % 20) < 10; // ~2s period, 50% duty
         bool blink_fast2 = (_tick % 5) < 2;
-        bool blink_fusion = (_tick % 3) < 1;
+        // fusion indicator removed per requirement: each LED reflects its own sensor only
 
         // Test override
         if (_test_until_us > now) {
@@ -65,42 +63,28 @@ public:
             return;
         }
 
-        // Simple startup indication (first 3s)
-        const bool heartbeat = (now - _start_us) < 3000000;
-        if (heartbeat) {
-             // Slow blink all to show system is alive
-            set_led(GPIO_nLED_GREEN, blink_slow_g ? BOARD_LED_ON : BOARD_LED_OFF);
-            set_led(GPIO_nLED_YELLOW, blink_slow_y ? BOARD_LED_ON : BOARD_LED_OFF);
-            set_led(GPIO_nLED_RED, blink_slow_r ? BOARD_LED_ON : BOARD_LED_OFF);
-            return;
-        }
+        // Startup: no special gating; slow blink occurs immediately even without data
 
         // Independent logic per sensor: Fast = Data, Slow = No Data
-        // Fusion indication: LED1+LED2 simultaneous faster blink (~3.3Hz) overrides normal state
-
         // LED1 (Green) - IMU1 (SPI1)
-        if (fusion) {
-            set_led(GPIO_nLED_GREEN, blink_fusion ? BOARD_LED_ON : BOARD_LED_OFF);
-        } else if (imu1) {
+        if (imu1) {
             set_led(GPIO_nLED_GREEN, blink_fast2 ? BOARD_LED_ON : BOARD_LED_OFF);
         } else {
-            set_led(GPIO_nLED_GREEN, blink_slow_g ? BOARD_LED_ON : BOARD_LED_OFF);
+            set_led(GPIO_nLED_GREEN, blink_slow ? BOARD_LED_ON : BOARD_LED_OFF);
         }
 
         // LED2 (Yellow) - IMU2 (SPI3)
-        if (fusion) {
-            set_led(GPIO_nLED_YELLOW, blink_fusion ? BOARD_LED_ON : BOARD_LED_OFF);
-        } else if (imu2) {
+        if (imu2) {
             set_led(GPIO_nLED_YELLOW, blink_fast2 ? BOARD_LED_ON : BOARD_LED_OFF);
         } else {
-            set_led(GPIO_nLED_YELLOW, blink_slow_y ? BOARD_LED_ON : BOARD_LED_OFF);
+            set_led(GPIO_nLED_YELLOW, blink_slow ? BOARD_LED_ON : BOARD_LED_OFF);
         }
 
         // LED3 (Red) - Mag (I2C1)
         if (mag) {
             set_led(GPIO_nLED_RED, blink_fast2 ? BOARD_LED_ON : BOARD_LED_OFF);
         } else {
-            set_led(GPIO_nLED_RED, blink_slow_r ? BOARD_LED_ON : BOARD_LED_OFF);
+            set_led(GPIO_nLED_RED, blink_slow ? BOARD_LED_ON : BOARD_LED_OFF);
         }
 
         if (now - _last_log_us > 5000000) {

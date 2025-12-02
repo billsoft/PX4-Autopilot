@@ -1,0 +1,5 @@
+menuconfig MODULES_SENSOR_STUB
+	bool "sensor_stub"
+	default y
+	---help---
+		Enable sensor_stub module (publish sensor_accel[0/1] & sensor_mag for bringup)

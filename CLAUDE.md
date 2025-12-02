@@ -401,3 +401,122 @@ make list_config_targets | grep nucleo     # List all Nucleo targets
 - NuttX submodule: `platforms/nuttx/NuttX/nuttx`
 - Board defconfig: Auto-generated from board configuration
 - No manual HAL initialization required (PX4 build system handles this)
+
+---
+
+## Documentation Management Rules
+
+### CRITICAL: Do NOT Create New Documentation Files
+
+**Rule 1: Edit Existing Files Instead of Creating New Ones**
+- ❌ NEVER create new `.md` files for updates, summaries, or reports
+- ✅ ALWAYS update existing documentation files in place
+- ✅ If information is outdated, edit the existing file to update it
+- ✅ If creating a new guide, check if an existing file can be expanded instead
+
+**Rule 2: Delete Redundant Files Immediately**
+- If you must create a new file (e.g., major restructure), delete the old version immediately
+- Use version suffixes (e.g., `_v2`) ONLY during active transition
+- Remove version suffixes once transition is complete
+
+**Rule 3: Consolidate Instead of Duplicate**
+- Before creating a new document, check if the information belongs in an existing file
+- Prefer adding sections to existing documents over creating new files
+- Example: Add test results to `test_results_template.md` instead of creating `test_results_2025-12-02.md`
+
+**Rule 4: Maintain Single Source of Truth**
+- Each topic should have ONE authoritative document
+- Cross-reference between documents using relative links
+- Update the main document index (`.trae/documents/build/README.md`) when structure changes
+
+### Documentation Directory Structure
+
+**Core Documentation Locations**:
+- `.trae/documents/build/` - Build and testing documentation
+- `.trae/documents/` - General project documentation
+- `boards/st/nucleo-h743zi-fc/` - Board-specific technical docs
+
+**Key Files (Do NOT Duplicate)**:
+- `stm32_custom_board_bringup_tutorial_v2.md` - Main development guide (update in place)
+- `TESTING_CHECKLIST.md` - Test checklist (update in place)
+- `test_results_template.md` - Template for recording results (users fill this out)
+- `work_summary_2025-12-02.md` - Work summaries (create dated files for historical record ONLY)
+- `README.md` - Documentation index (update when structure changes)
+
+### When Creating Files IS Acceptable
+
+**Acceptable new file types**:
+1. **Dated work summaries**: `work_summary_YYYY-MM-DD.md` (historical record)
+2. **User-filled templates**: Users create their own copies of `test_results_template.md`
+3. **Major version transitions**: `tutorial_v2.md` replacing `tutorial.md` (delete old after transition)
+4. **New functionality**: Genuinely new guides for topics not covered in existing docs
+
+**Example of Good Practice**:
+```bash
+# User asks to update test checklist
+# ❌ Bad: Create "test_checklist_updated.md"
+# ✅ Good: Edit "TESTING_CHECKLIST.md" directly
+
+# User asks to add troubleshooting info
+# ❌ Bad: Create "troubleshooting_guide.md"
+# ✅ Good: Add section to existing "stm32_custom_board_bringup_tutorial_v2.md"
+```
+
+### Cleanup Protocol
+
+When you notice duplicate or outdated files:
+1. Identify which file is the authoritative version
+2. Merge useful content from old files into the authoritative version
+3. Delete redundant files immediately
+4. Update README.md to reflect the cleanup
+5. Document deletions in README.md under "Cleaned Documents" section
+
+---
+
+## Testing and Verification Workflow
+
+### Automated Testing via Python Script
+
+**Testing Tool Location**: `Tools/verify_board.py`
+
+This script automates NSH command execution and result verification for Nucleo-H743ZI-FC.
+
+**Usage**:
+```bash
+# Auto-detect serial port and run full test
+python Tools/verify_board.py
+
+# Specify serial port
+python Tools/verify_board.py --port COM3
+
+# Quick test only (5 minutes)
+python Tools/verify_board.py --quick
+
+# Generate detailed report
+python Tools/verify_board.py --report test_results_YYYY-MM-DD.md
+```
+
+**What the script does**:
+1. Auto-detect board serial port (Windows/Linux/WSL)
+2. Execute NSH commands from test checklist
+3. Parse and validate output
+4. Identify failures and suggest fixes
+5. Generate formatted test report
+6. Optionally apply automatic fixes for known issues
+
+**Integration with Development Workflow**:
+```bash
+# After code changes:
+1. Build firmware (user manually executes build command)
+2. Flash firmware (python Tools/flash/flash_fw.py)
+3. Verify board (python Tools/verify_board.py)
+4. If failures detected, script suggests fixes
+5. Apply fixes and repeat
+```
+
+### Manual Testing Reference
+
+If automated testing fails or is unavailable:
+- Refer to `.trae/documents/build/TESTING_CHECKLIST.md`
+- Use `.trae/documents/build/nsh_quick_test_card.md` for quick manual tests
+- Record results in a copy of `test_results_template.md`

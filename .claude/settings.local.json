@@ -25,7 +25,9 @@
       "Bash(git rm:*)",
       "Bash(del .traedocumentsbuildcompilation_error_fix_report.md)",
       "Bash(git -C /mnt/d/code/px4/PX4-Autopilot status)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

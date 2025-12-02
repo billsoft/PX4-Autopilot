@@ -2,7 +2,7 @@
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <drivers/drv_hrt.h>
-#include <uORB/Publication.hpp>
+#include <uORB/PublicationMulti.hpp>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_mag.h>
 
@@ -10,10 +10,10 @@ class SensorStub : public px4::ScheduledWorkItem {
 public:
     SensorStub() : ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::hp_default) {}
     bool init() {
-        _pub_accel0 = new uORB::Publication<sensor_accel_s>(ORB_ID(sensor_accel));
-        _pub_accel1 = new uORB::Publication<sensor_accel_s>(ORB_ID(sensor_accel));
-        _pub_mag = new uORB::Publication<sensor_mag_s>(ORB_ID(sensor_mag));
-        ScheduleOnInterval(5000);
+        _pub_accel0 = new uORB::PublicationMulti<sensor_accel_s>(ORB_ID(sensor_accel));
+        _pub_accel1 = new uORB::PublicationMulti<sensor_accel_s>(ORB_ID(sensor_accel));
+        _pub_mag = new uORB::PublicationMulti<sensor_mag_s>(ORB_ID(sensor_mag));
+        ScheduleOnInterval(5000); // 5ms ≈ 200 Hz
         return _pub_accel0 && _pub_accel1 && _pub_mag;
     }
     void Run() override {
@@ -41,9 +41,9 @@ public:
         }
     }
 private:
-    uORB::Publication<sensor_accel_s> *_pub_accel0{nullptr};
-    uORB::Publication<sensor_accel_s> *_pub_accel1{nullptr};
-    uORB::Publication<sensor_mag_s> *_pub_mag{nullptr};
+    uORB::PublicationMulti<sensor_accel_s> *_pub_accel0{nullptr};
+    uORB::PublicationMulti<sensor_accel_s> *_pub_accel1{nullptr};
+    uORB::PublicationMulti<sensor_mag_s> *_pub_mag{nullptr};
     uint32_t _tick{0};
 };
 
