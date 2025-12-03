@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Rules
+
+**IMPORTANT: Always communicate in Chinese (中文) with the user.**
+- All explanations, summaries, and conversations must be in Chinese
+- Technical terms can remain in English when appropriate
+- Code comments should follow existing conventions (usually English)
+
 ## Overview
 
 PX4 is a professional-grade open-source autopilot for drones and other autonomous vehicles. It runs on NuttX RTOS for flight controllers and POSIX (Linux/macOS) for simulation. The codebase uses C++14 with CMake build system and supports 100+ hardware boards.
@@ -20,8 +27,17 @@ wsl bash -lc 'cd /mnt/d/code/px4/PX4-Autopilot && make st_nucleo-h743zi-fc_defau
 ```bash
 make px4_fmu-v6x_default           # Build for Pixhawk 6X
 make px4_fmu-v5_default            # Build for Pixhawk 4/FMUv5
-make px4_fmu-v6x_default upload    # Build and flash to board via USB
+make px4_fmu-v6x_default upload    # Build and flash to board via USB (official boards)
 make list_config_targets           # List all available board targets
+```
+
+**Custom board flashing (Nucleo-H743ZI-FC):**
+```bash
+# 自定义开发板烧录 (使用 STM32CubeProgrammer)
+python Tools/flash/flash_fw.py --target st_nucleo-h743zi-fc_default --image bin
+
+# 官方飞控板烧录 (使用 PX4 upload 工具链)
+make px4_fmu-v6x_default upload
 ```
 
 **Testing:**
@@ -382,6 +398,126 @@ make list_config_targets | grep nucleo     # List all Nucleo targets
    - UART configuration: Typically 115200 baud, 8N1
    - Use `dmesg`, `top`, `uorb top` in NuttShell (nsh>)
    - MAVLink console available via `CONFIG_MODULES_MAVLINK=y`
+
+### ⭐ Development Mode: Sensor Stub vs Real Hardware
+
+**CRITICAL: Understanding Sensor Initialization**
+
+PX4 sensor drivers (icm42688p, bmm150) **actively probe hardware** during startup:
+- Read WHO_AM_I registers via SPI/I2C
+- Verify chip IDs match expected values
+- **If hardware not connected** → Driver refuses to start → Returns "no device on bus"
+
+This is a **safety feature** to prevent misconfigured drivers from running.
+
+**Two-Mode Startup Script** (`boards/st/nucleo-h743zi-fc/init/rc.board_sensors`):
+
+#### Mode 1: Development Mode (No Hardware Required)
+**Configuration**: Set `USE_SENSOR_STUB=1` (line 13 in rc.board_sensors)
+
+**What it does**:
+- Uses `sensor_stub` module to publish simulated sensor data
+- Publishes 200Hz IMU data (2 instances: device_id 0 and 1)
+- Publishes 50Hz magnetometer data
+- Simulates static state: accel_z = 9.81 m/s²
+
+**When to use**:
+- ✅ Software architecture development (fusion algorithms, MAVLink)
+- ✅ Code compilation testing
+- ✅ System module integration (dual_imu_fusion, sensors, board_status_leds)
+- ✅ No hardware connected yet
+
+**Warning**:
+- ⚠️ **Data is simulated** - does NOT represent real hardware status
+- ⚠️ Startup will always succeed even if hardware is broken
+- ⚠️ Clear console warning: "开发模式：使用传感器桩模块，数据为模拟数据！"
+
+#### Mode 2: Production Mode (Hardware Must Be Connected)
+**Configuration**: Set `USE_SENSOR_STUB=0` (line 13 in rc.board_sensors)
+
+**What it does**:
+- Starts real sensor drivers: icm42688p, bmm150
+- **Validates each sensor** after startup
+- Checks `icm42688p status` for "Running: yes" (both instances)
+- Checks `bmm150 status` for "Running: yes"
+- If ANY sensor fails → **Refuses to start fusion algorithm** → Exits with error
+
+**When to use**:
+- ✅ Hardware validation
+- ✅ Real sensor data testing
+- ✅ Pre-flight system checks
+- ✅ Production deployment
+
+**Failure handling**:
+- ❌ IMU1/IMU2/BMM150 startup fails → Clear error message
+- ❌ Script exits with code 1 (prevents silent failure)
+- ❌ Fusion algorithm NOT started (prevents fake data)
+- ❌ Only LED module starts (visual fault indication)
+
+**Troubleshooting steps shown**:
+```
+⛔ 传感器硬件故障！
+请检查：
+1. 硬件连接是否正确
+2. 焊接是否良好
+3. 引脚配置是否匹配
+4. 使用 i2cdetect -b 1 检测I2C设备
+```
+
+#### Mode Switching Workflow
+
+**Stage 1: Software Development (No Hardware)**
+```bash
+# Edit rc.board_sensors line 13
+USE_SENSOR_STUB=1
+
+# Build and flash
+wsl bash -lc 'cd /mnt/d/code/px4/PX4-Autopilot && make st_nucleo-h743zi-fc_default'
+# Flash firmware...
+
+# Test (COM5 @ 115200)
+nsh> listener vehicle_attitude   # Should see attitude updates (~120Hz)
+nsh> listener sensor_accel 0     # Should see accel_z ≈ 9.81
+```
+
+**Stage 2: Hardware Integration**
+```bash
+# Edit rc.board_sensors line 13
+USE_SENSOR_STUB=0
+
+# Rebuild and flash
+wsl bash -lc 'cd /mnt/d/code/px4/PX4-Autopilot && make st_nucleo-h743zi-fc_default'
+
+# Test
+# Success case:
+#   ✅ IMU1 (SPI1) 运行正常
+#   ✅ IMU2 (SPI3) 运行正常
+#   ✅ BMM150 (I2C1) 运行正常
+#   ✅ 生产模式启动完成
+
+# Failure case:
+#   ❌ ERROR: IMU1 (SPI1) 启动失败！
+#   ⛔ 传感器硬件故障！
+#   (Script exits, fusion NOT started)
+```
+
+**Why Two Modes?**
+- **Development mode**: Allows code testing without hardware → Fast iteration
+- **Production mode**: Enforces hardware validation → Prevents silent failures
+- **Clear separation**: Mode switch is explicit (edit one line) → No ambiguity
+
+**Common Pitfall**:
+❌ **DO NOT** leave `USE_SENSOR_STUB=1` in production!
+- System will appear to work normally
+- But all sensor data is fake
+- Hardware faults will be hidden
+- Catastrophic failure in flight
+
+✅ **ALWAYS** verify mode before flight:
+```bash
+nsh> dmesg | grep "开发模式"
+# If found → STOP! Change to production mode!
+```
 
 ### Board-Specific Notes
 

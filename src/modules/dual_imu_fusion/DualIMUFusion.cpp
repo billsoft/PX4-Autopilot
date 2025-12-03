@@ -55,8 +55,9 @@ private:
         const bool g1_new = _gyro_sub1.update(&g1);
         const bool g2_new = _gyro_sub2.update(&g2);
         const bool m_new  = _mag_sub.update(&m);
+        const bool have_gyro = g1_new && g2_new;
 
-        if (!(a1_new && a2_new && g1_new && g2_new)) {
+        if (!(a1_new && a2_new)) {
             return;
         }
 
@@ -65,13 +66,16 @@ private:
         const uint64_t ts_a2 = a2.timestamp_sample;
         const uint64_t ts_g1 = g1.timestamp_sample;
         const uint64_t ts_g2 = g2.timestamp_sample;
-        const uint64_t dt_us = (ts_g1 > _last_ts) ? (ts_g1 - _last_ts) : 8333;
-        _last_ts = ts_g1;
+        const uint64_t base_ts = have_gyro ? ts_g1 : ts_a1;
+        const uint64_t dt_us = (base_ts > _last_ts) ? (base_ts - _last_ts) : 8333;
+        _last_ts = base_ts;
 
         // 同步检查（≤1ms）
         const uint64_t sync_thr_us = 1000;
         if ((ts_a1 > ts_a2 ? ts_a1 - ts_a2 : ts_a2 - ts_a1) > sync_thr_us) return;
-        if ((ts_g1 > ts_g2 ? ts_g1 - ts_g2 : ts_g2 - ts_g1) > sync_thr_us) return;
+        if (have_gyro) {
+            if ((ts_g1 > ts_g2 ? ts_g1 - ts_g2 : ts_g2 - ts_g1) > sync_thr_us) return;
+        }
 
         // 简单低通滤波
         matrix::Vector3f accel1{a1.x, a1.y, a1.z};
@@ -82,8 +86,10 @@ private:
         const float alpha = _lpf_alpha; // 0..1
         _accel1_filt = _accel1_filt + alpha * (accel1 - _accel1_filt);
         _accel2_filt = _accel2_filt + alpha * (accel2 - _accel2_filt);
-        _gyro1_filt  = _gyro1_filt  + alpha * (gyro1  - _gyro1_filt);
-        _gyro2_filt  = _gyro2_filt  + alpha * (gyro2  - _gyro2_filt);
+        if (have_gyro) {
+            _gyro1_filt  = _gyro1_filt  + alpha * (gyro1  - _gyro1_filt);
+            _gyro2_filt  = _gyro2_filt  + alpha * (gyro2  - _gyro2_filt);
+        }
 
         // 二号IMU已通过驱动 -R 参数进行安装方向对齐，不在融合中再翻转轴
         matrix::Vector3f accel2_aligned = _accel2_filt;
@@ -93,7 +99,7 @@ private:
         matrix::Vector3f noise_accel = accel2_aligned - _accel1_filt;
         matrix::Vector3f noise_gyro  = gyro2_aligned  - _gyro1_filt;
         matrix::Vector3f accel1_denoised = accel1 - _noise_gain * noise_accel;
-        matrix::Vector3f gyro1_denoised  = gyro1  - _noise_gain * noise_gyro;
+        matrix::Vector3f gyro1_denoised  = have_gyro ? (gyro1 - _noise_gain * noise_gyro) : matrix::Vector3f{0.f, 0.f, 0.f};
 
         // 互补/Mahony融合
         const float dt = (float)dt_us * 1e-6f;
@@ -117,10 +123,11 @@ private:
             _initialized = true;
         }
 
-        // 陀螺积分
         matrix::Vector3f omega = gyro1_denoised;
-        matrix::Quatf dq{1.f, 0.5f * omega(0) * dt, 0.5f * omega(1) * dt, 0.5f * omega(2) * dt};
-        _q = (_q * dq).normalized();
+        if (have_gyro) {
+            matrix::Quatf dq{1.f, 0.5f * omega(0) * dt, 0.5f * omega(1) * dt, 0.5f * omega(2) * dt};
+            _q = (_q * dq).normalized();
+        }
 
         // 加速度校正（重力方向误差）
         matrix::Vector3f g_body = _q.inversed().rotateVector(matrix::Vector3f{0.f, 0.f, -1.f});
@@ -145,12 +152,31 @@ private:
         }
 
         // 应用校正后的陀螺再积分
-        matrix::Quatf dq2{1.f, 0.5f * omega(0) * dt, 0.5f * omega(1) * dt, 0.5f * omega(2) * dt};
-        _q = (_q * dq2).normalized();
+        if (have_gyro) {
+            matrix::Quatf dq2{1.f, 0.5f * omega(0) * dt, 0.5f * omega(1) * dt, 0.5f * omega(2) * dt};
+            _q = (_q * dq2).normalized();
+        } else {
+            matrix::Vector3f acc_n = accel1_denoised.normalized();
+            float roll = atan2f(-acc_n(1), -acc_n(2));
+            float pitch = asinf(acc_n(0));
+            float yaw = 0.f;
+            if (m_new) {
+                matrix::Vector3f mag_n = matrix::Vector3f{m.x, m.y, m.z}.normalized();
+                float mx = mag_n(0) * cosf(pitch) + mag_n(1) * sinf(roll) * sinf(pitch) + mag_n(2) * cosf(roll) * sinf(pitch);
+                float my = mag_n(1) * cosf(roll) - mag_n(2) * sinf(roll);
+                yaw = atan2f(-my, mx);
+            }
+            matrix::Eulerf e_curr{_q};
+            const float blend = 0.2f;
+            matrix::Eulerf e_new{(1.f - blend) * e_curr(0) + blend * roll,
+                                 (1.f - blend) * e_curr(1) + blend * pitch,
+                                 (1.f - blend) * e_curr(2) + blend * yaw};
+            _q = matrix::Quatf(e_new).normalized();
+        }
 
         vehicle_attitude_s att{};
         att.timestamp = ts;
-        att.timestamp_sample = ts_g1;
+        att.timestamp_sample = have_gyro ? ts_g1 : ts_a1;
 
         // 四元数输出
         att.q[0] = _q(0); att.q[1] = _q(1); att.q[2] = _q(2); att.q[3] = _q(3);

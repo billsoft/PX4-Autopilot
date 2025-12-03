@@ -31,6 +31,27 @@ SRAM:  11.36 KB / 512 KB (2.22%)
 状态: ✅ 编译成功，已烧录
 ```
 
+### 运行模式切换 ⭐重要
+
+**启动脚本支持两种模式**（修改 `boards/st/nucleo-h743zi-fc/init/rc.board_sensors` 第13行）：
+
+#### 开发模式 (`USE_SENSOR_STUB=1`)
+- **用途**: 无硬件连接时验证软件逻辑
+- **特点**: 使用`sensor_stub`发布模拟数据（200Hz IMU + 50Hz磁力计）
+- **优点**: 可验证融合算法、MAVLink通信、LED指示
+- **⚠️ 警告**: 数据为模拟数据，不代表真实硬件工作！
+
+#### 生产模式 (`USE_SENSOR_STUB=0`)
+- **用途**: 硬件连接后验证真实传感器
+- **特点**: 启动icm42688p和bmm150驱动
+- **硬件检测**: 传感器启动失败时**拒绝启动融合算法**
+- **故障提示**: 明确报告哪个传感器故障及排查建议
+
+**切换流程**：
+1. 开发阶段：`USE_SENSOR_STUB=1` → 编译烧录 → 验证软件
+2. 硬件连接：`USE_SENSOR_STUB=0` → 重新编译烧录 → 验证硬件
+3. 如果传感器失败，系统会明确报错并停止启动
+
 ---
 
 ## 📚 核心文档（按优先级排序）
@@ -78,6 +99,48 @@ SRAM:  11.36 KB / 512 KB (2.22%)
 - 调试命令速查
 
 **何时使用**: 每次烧录后快速验证系统状态
+
+---
+
+#### 3.5. [sensor_stub_mode_quickref.md](sensor_stub_mode_quickref.md) ⭐⭐
+**用途**: 传感器桩模式快速参考卡（开发模式 vs 生产模式）
+**内容**:
+- 双模式对照表（USE_SENSOR_STUB=0/1）
+- 开发模式详情（无硬件，模拟数据）
+- 生产模式详情（真实硬件，故障检测）
+- 模式切换完整流程
+- 故障排查指南
+- 常用NSH命令速查
+
+**何时使用**:
+- 首次开发时必读（理解为什么传感器启动失败）
+- 硬件连接前后切换模式
+- 飞行前确认当前模式
+
+**⚠️ 重要**: 飞行前必须确认 `USE_SENSOR_STUB=0`，否则所有数据都是假的！
+
+---
+
+#### 3.6. [usb_cdc_acm_mavlink_setup.md](usb_cdc_acm_mavlink_setup.md) ⭐⭐
+**用途**: USB CDC ACM MAVLink 配置方案（解决控制台冲突）
+**内容**:
+- Nucleo-H743ZI 双 USB 接口说明（ST-LINK + 用户 USB）
+- USB CDC ACM 技术原理（虚拟串口）
+- NuttX defconfig 配置（CONFIG_USBDEV + CONFIG_CDCACM）
+- 启动脚本修改（自动检测 USB 设备）
+- 开发/生产模式 MAVLink 配置策略
+- PC 端验证方法（Linux/Windows）
+- 故障排查完整指南
+
+**何时使用**:
+- 需要同时使用 NSH 控制台和 MAVLink 遥测
+- 解决 MAVLink 二进制数据淹没控制台问题
+- QGroundControl 连接调试
+
+**关键方案**:
+- 控制台：ST-LINK USB (ttyS0)
+- MAVLink：用户 USB CDC ACM (ttyACM0)
+- 完全独立，互不干扰
 
 ---
 

@@ -27,7 +27,9 @@
       "Bash(git -C /mnt/d/code/px4/PX4-Autopilot status)",
       "Bash(dir:*)",
       "Bash(python:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(pyocd flash:*)",
+      "Bash(git check-ignore:*)"
     ],
     "deny": [],
     "ask": []
