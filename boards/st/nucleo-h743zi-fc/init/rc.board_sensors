@@ -1,21 +1,234 @@
 #!/bin/sh
-icm42688p start -s -b 1 -R 0 -6
-icm42688p start -s -b 3 -R 8 -6
-usleep 100000
-bmm150 start -I -b 1 -R 0
-usleep 50000
-cmos_sync start
-dual_imu_fusion start
-sensors start
-mavlink status
-board_status_leds start
-mavlink stream -u -r 1 -s DEBUG
-# board_status_leds test 10
-mavlink stream -u -r 120 -s ATTITUDE_QUATERNION
-# mavlink stream -u -r 120 -s HIGHRES_IMU  # 不需要原始IMU数据
-# mavlink stream -u -r 50 -s ATTITUDE      # 与ATTITUDE_QUATERNION冗余
-if icm42688p status | grep -q "Not running"; then
-  if bmm150 status | grep -q "Not running"; then
+#
+# Nucleo-H743ZI-FC sensor init script (ASCII only)
+#
+# Mode switch: set USE_SENSOR_STUB below
+#   1 = Development mode (use software stub, no hardware required)
+#   0 = Production mode (use real sensors, hardware required)
+#
+
+# ============================================================
+# Config: select run mode
+# ============================================================
+USE_SENSOR_STUB=1  # set 1 for development, 0 for production
+
+# ============================================================
+# Mode 1: Development - use sensor stub (no hardware)
+# ============================================================
+if [ $USE_SENSOR_STUB -eq 1 ]; then
+    echo "=========================================="
+    echo "  Development mode: using sensor stub"
+    echo "  Data is simulated, not real hardware"
+    echo "=========================================="
+
+    # Start sensor stub first (must be ready before fusion)
     sensor_stub start
-  fi
+    usleep 200000  # Wait 200ms for stub to initialize
+
+    if sensor_stub status | grep -q "not running"; then
+        echo "ERROR: sensor_stub failed to start"
+        # Continue anyway for debugging
+    else
+        echo "OK: sensor_stub started (simulated IMU+MAG data @ 200Hz)"
+    fi
+
+# ============================================================
+# Mode 2: Production - use real sensors (hardware required)
+# ============================================================
+else
+    echo "=========================================="
+    echo "  Production mode: start real sensors"
+    echo "=========================================="
+
+    # 启动IMU1 (SPI1)
+    echo "Start IMU1 (SPI1)"
+    icm42688p start -s -b 1 -R 0 -6
+    usleep 100000
+
+    # 启动IMU2 (SPI3)
+    echo "Start IMU2 (SPI3)"
+    icm42688p start -s -b 3 -R 8 -6
+    usleep 100000
+
+    # 启动磁力计 (I2C1)
+    echo "Start BMM150 (I2C1)"
+    bmm150 start -I -b 1 -R 0
+    usleep 50000
+
+    # ============================================================
+    # Hardware validation: check sensor start status
+    # ============================================================
+    SENSOR_OK=1
+
+    # Check IMU1
+    if icm42688p status | grep -q "instance 0.*Running: yes"; then
+        echo "OK: IMU1 (SPI1) running"
+    else
+        echo "ERROR: IMU1 (SPI1) failed to start"
+        SENSOR_OK=0
+    fi
+
+    # Check IMU2
+    if icm42688p status | grep -q "instance 1.*Running: yes"; then
+        echo "OK: IMU2 (SPI3) running"
+    else
+        echo "ERROR: IMU2 (SPI3) failed to start"
+        SENSOR_OK=0
+    fi
+
+    # Check magnetometer
+    if bmm150 status | grep -q "Running: yes"; then
+        echo "OK: BMM150 (I2C1) running"
+    else
+        echo "ERROR: BMM150 (I2C1) failed to start"
+        SENSOR_OK=0
+    fi
+
+    # ============================================================
+    # Sensor failure handling
+    # ============================================================
+    if [ $SENSOR_OK -eq 0 ]; then
+        echo "=========================================="
+        echo "  SENSOR HARDWARE FAILURE"
+        echo "  Please check:"
+        echo "  1. Wiring (SPI1/SPI3 for IMU, I2C1 for MAG)"
+        echo "  2. Soldering quality"
+        echo "  3. Pin mapping in board_config.h"
+        echo "  4. Run 'i2cdetect -b 1' for I2C device scan"
+        echo "  5. Run 'icm42688p status' for SPI IMU status"
+        echo "=========================================="
+        echo "WARNING: Switching to sensor_stub mode due to hardware failure"
+
+        # Fallback: use sensor_stub instead of exiting
+        sensor_stub start
+        usleep 200000
+
+        if sensor_stub status | grep -q "not running"; then
+            echo "ERROR: sensor_stub also failed, system cannot start"
+            exit 1
+        else
+            echo "OK: sensor_stub started as fallback (simulated data)"
+        fi
+    fi
+fi
+
+# ============================================================
+# Start common system modules (parallel, non-blocking)
+# ============================================================
+echo "[rc.board_sensors] Starting common system modules..."
+
+# CMOS sync (optional, non-critical)
+cmos_sync start 2>/dev/null
+
+# Dual IMU fusion (core module for attitude estimation)
+dual_imu_fusion start
+usleep 50000
+
+if dual_imu_fusion status | grep -q "not running"; then
+    echo "WARNING: dual_imu_fusion failed to start"
+else
+    echo "OK: dual_imu_fusion started"
+fi
+
+# Sensors pre-processing (voting, calibration)
+sensors start
+usleep 50000
+
+if sensors status | grep -q "not running"; then
+    echo "WARNING: sensors failed to start"
+else
+    echo "OK: sensors started"
+fi
+
+# ============================================================
+# LED status indication (starts immediately, runs in background)
+# ============================================================
+board_status_leds start &
+usleep 100000
+echo "OK: board_status_leds started (background task)"
+
+# ============================================================
+# USB CDC ACM + MAVLink setup (unified, always attempt)
+# ============================================================
+echo "[rc.board_sensors] Setting up USB CDC ACM..."
+
+# Connect USB CDC ACM device (single call, with retry)
+USB_READY=0
+for i in 1 2 3; do
+    echo "Attempting USB CDC ACM connection (try $i/3)..."
+    sercon
+    usleep 800000  # Wait 800ms for enumeration
+
+    if [ -c /dev/ttyACM0 ]; then
+        USB_READY=1
+        echo "OK: USB CDC ACM connected (/dev/ttyACM0)"
+        break
+    fi
+
+    echo "USB CDC ACM not ready, retry..."
+    serdis
+    usleep 300000
+done
+
+if [ $USB_READY -eq 0 ]; then
+    echo "WARNING: USB CDC ACM failed after 3 retries"
+    echo "         Check CN13 (user USB) connection to PC"
+fi
+
+# ============================================================
+# MAVLink streams (start only in development mode for testing)
+# ============================================================
+if [ $USE_SENSOR_STUB -eq 1 ]; then
+    echo "[rc.board_sensors] Development mode: starting MAVLink for data verification"
+
+    if [ $USB_READY -eq 1 ]; then
+        # Start MAVLink on USB CDC ACM
+        mavlink start -d /dev/ttyACM0 -b 115200 -m onboard -r 100000
+        usleep 200000
+
+        # Configure high-rate streams for testing
+        mavlink stream -d /dev/ttyACM0 -s ATTITUDE_QUATERNION -r 120
+        mavlink stream -d /dev/ttyACM0 -s HIGHRES_IMU -r 50
+        mavlink stream -d /dev/ttyACM0 -s SYS_STATUS -r 5
+        mavlink stream -d /dev/ttyACM0 -s HEARTBEAT -r 1
+
+        echo "OK: MAVLink started on USB CDC ACM"
+        echo "    Run 'mavlink_recv_test.py COM6' on PC to verify data"
+    else
+        echo "WARNING: USB CDC ACM not ready, MAVLink not started"
+    fi
+else
+    echo "[rc.board_sensors] Production mode: MAVLink configured for real sensors"
+
+    if [ $USB_READY -eq 1 ]; then
+        # Start MAVLink on USB CDC ACM (production config)
+        mavlink start -d /dev/ttyACM0 -b 115200 -m onboard -r 100000
+        usleep 200000
+
+        # Production streams (same as development for now)
+        mavlink stream -d /dev/ttyACM0 -s ATTITUDE_QUATERNION -r 120
+        mavlink stream -d /dev/ttyACM0 -s HIGHRES_IMU -r 50
+        mavlink stream -d /dev/ttyACM0 -s SYS_STATUS -r 5
+        mavlink stream -d /dev/ttyACM0 -s HEARTBEAT -r 1
+
+        echo "OK: MAVLink started (production mode)"
+        echo "    Connect QGroundControl to USB port"
+    fi
+fi
+
+# ============================================================
+# Done
+# ============================================================
+if [ $USE_SENSOR_STUB -eq 1 ]; then
+    echo "=========================================="
+    echo "  Development mode finished"
+    echo "  Use 'listener vehicle_attitude' to check attitude"
+    echo "  Data is simulated"
+    echo "=========================================="
+else
+    echo "=========================================="
+    echo "  Production mode finished"
+    echo "  Sensors running"
+    echo "  Use 'listener vehicle_attitude' to check attitude"
+    echo "=========================================="
 fi

@@ -20,6 +20,7 @@
 #include <sched.h>
 #include <unistd.h>
 extern "C" int board_status_leds_main(int argc, char *argv[]);
+extern "C" void stm32_usbinitialize(void);
 
 void stm32_spiinitialize(void);
 
@@ -119,6 +120,9 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 
     /* SPI Init */
     stm32_spiinitialize();
+
+    /* USB Init (for CDC ACM virtual serial port) */
+    stm32_usbinitialize();
 
     /* DMA Alloc Init */
     if (board_dma_alloc_init() < 0) {

@@ -4,6 +4,7 @@ add_library(drivers_board
     i2c.cpp
     board_hw_info.c
     stm32_boardinitialize.c
+    usb.c
 )
 
 target_link_libraries(drivers_board
