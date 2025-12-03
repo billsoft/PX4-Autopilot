@@ -29,7 +29,8 @@
       "Bash(python:*)",
       "Bash(pip install:*)",
       "Bash(pyocd flash:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []
