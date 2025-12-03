@@ -24,7 +24,7 @@ public:
     void Run() override {
         const uint64_t now = hrt_absolute_time();
         _tick++;
-        PX4_INFO("sensor_stub tick %lu", (unsigned long)_tick);
+        // PX4_INFO("sensor_stub tick %lu", (unsigned long)_tick);  // Disabled to reduce log spam
         sensor_accel_s a{};
         a.timestamp = now;
         a.timestamp_sample = now;
